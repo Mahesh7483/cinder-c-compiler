@@ -245,7 +245,11 @@ fn compile_c(opts: &Options, input: &str, out: &mut dyn Write, err: &mut dyn Wri
         verify_ir!("after optimization");
     }
     if opts.mode == Mode::Ir {
-        let text = crate::ir::print::print_module(&module);
+        let text = if opts.ir_lines {
+            crate::ir::print::print_module_annotated(&module)
+        } else {
+            crate::ir::print::print_module(&module)
+        };
         emit_text!(text);
     }
 

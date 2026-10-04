@@ -46,6 +46,8 @@ pub struct PpOptions {
     pub system_dirs: Vec<PathBuf>,
     /// `-nostdinc`: do not use the bundled headers.
     pub no_bundled_headers: bool,
+    /// `--restrict-includes`: no absolute paths, no `..`, no `-I`/system directories.
+    pub restrict_includes: bool,
     pub defines: Vec<MacroCmd>,
     pub opt_level: u8,
 }
@@ -811,6 +813,14 @@ impl<'s> Preprocessor<'s> {
 
     fn resolve_include(&mut self, name: &str, angle: bool, from: FileId) -> Option<Resolved> {
         let p = Path::new(name);
+        if self.opts.restrict_includes {
+            let escapes = p.is_absolute()
+                || p.components()
+                    .any(|c| matches!(c, std::path::Component::ParentDir | std::path::Component::Prefix(_)));
+            if escapes {
+                return None;
+            }
+        }
         if p.is_absolute() {
             return self.read_real_file(p);
         }
@@ -833,7 +843,11 @@ impl<'s> Preprocessor<'s> {
                 }
             }
         }
+        let real = !self.opts.restrict_includes;
         for d in self.opts.include_dirs.clone() {
+            if !real {
+                break;
+            }
             if let Some(r) = self.read_real_file(&d.join(name)) {
                 return Some(r);
             }
@@ -842,6 +856,9 @@ impl<'s> Preprocessor<'s> {
             return Some(r);
         }
         for d in self.opts.system_dirs.clone() {
+            if !real {
+                break;
+            }
             if let Some(r) = self.read_real_file(&d.join(name)) {
                 return Some(r);
             }

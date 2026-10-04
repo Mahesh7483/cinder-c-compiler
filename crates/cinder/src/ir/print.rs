@@ -4,6 +4,16 @@ use super::*;
 use std::fmt::Write;
 
 pub fn print_module(m: &Module) -> String {
+    print_module_with(m, false)
+}
+
+/// Like [`print_module`], but every instruction and terminator that has a source
+/// line ends in a `; L<n>` comment (used by the web playground to link IR lines to source lines).
+pub fn print_module_annotated(m: &Module) -> String {
+    print_module_with(m, true)
+}
+
+fn print_module_with(m: &Module, lines: bool) -> String {
     let mut s = String::new();
     // data first
     for sym in &m.syms {
@@ -56,7 +66,7 @@ pub fn print_module(m: &Module) -> String {
         s.push('\n');
     }
     for f in &m.funcs {
-        s.push_str(&print_func(m, f));
+        s.push_str(&print_func_with(m, f, lines));
         s.push('\n');
     }
     s
@@ -93,6 +103,7 @@ fn ty_name(t: Type) -> &'static str {
 struct P<'a> {
     m: &'a Module,
     f: &'a Func,
+    lines: bool,
 }
 
 impl<'a> P<'a> {
@@ -223,7 +234,8 @@ impl<'a> P<'a> {
             InstKind::VaStackArgs => "va_stack_args".to_string(),
             InstKind::Trap => "trap".to_string(),
         };
-        format!("  {}{}", lhs, body)
+        let note = if self.lines && i.line != 0 { format!("  ; L{}", i.line) } else { String::new() };
+        format!("  {}{}{}", lhs, body, note)
     }
 
     fn term(&self, t: &Term) -> String {
@@ -258,7 +270,11 @@ impl<'a> P<'a> {
 }
 
 pub fn print_func(m: &Module, f: &Func) -> String {
-    let p = P { m, f };
+    print_func_with(m, f, false)
+}
+
+fn print_func_with(m: &Module, f: &Func, lines: bool) -> String {
+    let p = P { m, f, lines };
     let mut s = String::new();
     let rets: Vec<&str> = f.rets.iter().map(|t| ty_name(*t)).collect();
     let rs = match rets.len() {
@@ -283,7 +299,8 @@ pub fn print_func(m: &Module, f: &Func) -> String {
         for &id in &b.insts {
             let _ = writeln!(s, "{}", p.inst(id));
         }
-        let _ = writeln!(s, "{}", p.term(&b.term));
+        let note = if lines && b.term_line != 0 { format!("  ; L{}", b.term_line) } else { String::new() };
+        let _ = writeln!(s, "{}{}", p.term(&b.term), note);
     }
     s.push_str("}\n");
     s

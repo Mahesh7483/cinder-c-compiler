@@ -609,3 +609,13 @@ fn blocks_without_vlas_do_not_touch_the_stack_pointer() {
     let t = ir("int f(int n) { int a[8]; a[0] = n; return a[0]; }");
     assert!(!t.contains("stacksave") && !t.contains("dynalloca"), "{t}");
 }
+
+#[test]
+fn annotated_ir_carries_source_lines() {
+    let (m, _) = build("int f(int a) {\n  int b = a + 1;\n  return b * 2;\n}\n");
+    let t = crate::ir::print::print_module_annotated(&m);
+    assert!(t.contains("; L2"), "{t}");
+    assert!(t.contains("; L3"), "{t}");
+    // the plain printer is unchanged
+    assert!(!crate::ir::print::print_module(&m).contains("; L"));
+}

@@ -549,3 +549,17 @@ fn e_output_markers_for_includes() {
     assert!(text.contains("\"<cinder>/stddef.h\"\n"), "{text}");
     assert!(text.contains("# 2 \"t.c\"\nint x;"), "{text}");
 }
+
+#[test]
+fn restricted_includes_refuse_paths_that_escape() {
+    let opts = PpOptions { restrict_includes: true, ..Default::default() };
+    for src in
+        ["#include \"/etc/passwd\"\nint x;", "#include <../../etc/passwd>\nint x;", "#include \"../secret.h\"\nint x;"]
+    {
+        let r = run_opts(src, opts.clone());
+        assert!(r.errors.iter().any(|e| e.contains("file not found")), "{src}: {:?}", r.errors);
+    }
+    // bundled headers still work
+    let r = run_opts("#include <stdio.h>\nint x;", opts);
+    assert!(r.errors.is_empty(), "{:?}", r.errors);
+}

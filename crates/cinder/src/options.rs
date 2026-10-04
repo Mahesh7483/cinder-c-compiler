@@ -42,6 +42,8 @@ pub struct Options {
     pub warn: WarnConfig,
     pub color: ColorChoice,
     pub diag_json: bool,
+    /// `--emit-ir-lines`: annotate IR with source lines.
+    pub ir_lines: bool,
     pub error_limit: usize,
     /// `-l`, `-L`, `-static`, ... forwarded to the linker driver.
     pub link_args: Vec<String>,
@@ -61,6 +63,7 @@ impl Default for Options {
             warn: WarnConfig::default(),
             color: ColorChoice::Auto,
             diag_json: false,
+            ir_lines: false,
             error_limit: 20,
             link_args: Vec::new(),
             pass_flags: Vec::new(),
@@ -104,6 +107,8 @@ OPTIONS:
   -fsyntax-only         Check the program and report diagnostics; produce no output
   --emit-hir            Print the typed tree (types and implicit conversions made explicit)
   --emit-ir             Print the SSA intermediate representation
+  --emit-ir-lines       Like --emit-ir, with a '; L<n>' source-line comment on each instruction
+  --restrict-includes   #include may only name bundled headers and files below the source directory
   --color=<auto|always|never>
   --diagnostics-format=<text|json>
   -ferror-limit=<n>     Stop after n errors (0 = no limit)
@@ -135,6 +140,11 @@ pub fn parse_args(args: &[String]) -> Result<Cli, String> {
             "-fsyntax-only" => o.mode = Mode::Check,
             "--emit-hir" => o.mode = Mode::Hir,
             "--emit-ir" => o.mode = Mode::Ir,
+            "--emit-ir-lines" => {
+                o.mode = Mode::Ir;
+                o.ir_lines = true;
+            }
+            "--restrict-includes" => o.pp.restrict_includes = true,
             "-O0" => o.opt_level = 0,
             "-O" | "-O1" => o.opt_level = 1,
             "-O2" | "-O3" | "-Os" | "-Ofast" => o.opt_level = 2,
