@@ -1021,21 +1021,8 @@ impl<'a> Sema<'a> {
             }
             let mut ty = ty;
             let has_init = id.init.is_some();
-            // Initializer (may complete an array type).
-            let mut plan = None;
-            if let Some(init) = &id.init {
-                if storage == Some(StorageClass::Extern) {
-                    self.warn(
-                        Warn::ExternInitializer,
-                        name.span,
-                        format!("'extern' variable '{}' has an initializer", name.name),
-                    );
-                }
-                let (t2, p) = self.initialize(ty, init, true, name.span);
-                ty = t2;
-                plan = p;
-            } else if !self.types.is_complete(ty) && storage != Some(StorageClass::Extern) {
-                // Tentative definition of an incomplete array is completed to one element (C11 6.9.2p5).
+            // Tentative definition of an incomplete array is completed to one element (C11 6.9.2p5).
+            if !has_init && !self.types.is_complete(ty) && storage != Some(StorageClass::Extern) {
                 if let TyKind::Array(e, ArrayLen::Incomplete) = self.types.kind(ty).clone() {
                     self.warn(
                         Warn::TentativeDefinition,
@@ -1048,12 +1035,32 @@ impl<'a> Sema<'a> {
                     self.error(name.span, format!("variable has incomplete type '{}'", t));
                 }
             }
-            let natural = self.types.align_of(ty);
+            // The name is in scope in its own initializer (`int *p = &p;`).
+            let natural = if self.types.is_complete(ty) { self.types.align_of(ty) } else { 1 };
             let sid = self.declare_global_var(name, ty, storage, has_init, align.max(natural));
-            if let Some(p) = plan {
-                self.syms[sid.0 as usize].init = Some(p);
-            }
             self.declare_ordinary(name.name, EntKind::Global(sid), name.span);
+            if let Some(init) = &id.init {
+                if storage == Some(StorageClass::Extern) {
+                    self.warn(
+                        Warn::ExternInitializer,
+                        name.span,
+                        format!("'extern' variable '{}' has an initializer", name.name),
+                    );
+                }
+                let (t2, plan) = self.initialize(ty, init, true, name.span);
+                // The initializer may complete an array type (`int a[] = {1, 2, 3};`).
+                let cur = self.syms[sid.0 as usize].ty;
+                if self.types.compatible_unqual(cur, t2) {
+                    let merged = self.types.composite(cur, t2);
+                    let nat = self.types.align_of(merged);
+                    let sym = &mut self.syms[sid.0 as usize];
+                    sym.ty = merged;
+                    sym.align = sym.align.max(nat);
+                }
+                if let Some(p) = plan {
+                    self.syms[sid.0 as usize].init = Some(p);
+                }
+            }
         }
     }
 
@@ -1140,40 +1147,51 @@ impl<'a> Sema<'a> {
                 Some(StorageClass::Static) => {
                     // A static local lives in static storage under a mangled, file-private name.
                     let fname = self.f.as_ref().map(|f| f.name.to_string()).unwrap_or_default();
-                    let mut plan = None;
-                    if let Some(init) = &id.init {
-                        let (t2, p) = self.initialize(ty, init, true, name.span);
-                        ty = t2;
-                        plan = p;
-                    } else if !self.require_complete(ty, name.span, "variable") {
+                    if id.init.is_none() && !self.require_complete(ty, name.span, "variable") {
                         continue;
                     }
-                    let natural = self.types.align_of(ty);
+                    let natural = if self.types.is_complete(ty) { self.types.align_of(ty) } else { 1 };
                     let sid =
                         self.new_anon_global(format!("{}.{}", fname, name.name), ty, name.span, align.max(natural));
-                    let sym = &mut self.syms[sid.0 as usize];
-                    sym.init = plan;
-                    sym.tentative = sym.init.is_none();
+                    // In scope in its own initializer.
                     self.declare_ordinary(name.name, EntKind::Global(sid), name.span);
+                    if let Some(init) = &id.init {
+                        let (t2, plan) = self.initialize(ty, init, true, name.span);
+                        ty = t2;
+                        let nat = self.types.align_of(ty);
+                        let sym = &mut self.syms[sid.0 as usize];
+                        sym.ty = ty;
+                        sym.align = sym.align.max(nat);
+                        sym.init = plan;
+                    }
+                    let sym = &mut self.syms[sid.0 as usize];
+                    sym.tentative = sym.init.is_none();
                 }
                 _ => {
-                    let mut plan = None;
-                    if let Some(init) = &id.init {
-                        let (t2, p) = self.initialize(ty, init, false, name.span);
-                        ty = t2;
-                        plan = p;
-                    } else if !self.require_complete(ty, name.span, "variable") {
+                    if id.init.is_none() && !self.require_complete(ty, name.span, "variable") {
                         continue;
                     }
                     if self.types.is_vla(ty) {
                         continue;
                     }
-                    let natural = self.types.align_of(ty);
+                    let natural = if self.types.is_complete(ty) { self.types.align_of(ty) } else { 1 };
+                    // In scope in its own initializer (`T *p = malloc(sizeof *p);`).
                     let lid = self.new_local(name.name, ty, name.span, false, align.max(natural));
                     if Self::has_attr(&d.specs.attrs, "unused") || Self::has_attr(&decl.attrs, "unused") {
                         self.f.as_mut().unwrap().locals[lid.0 as usize].used = true;
                     }
                     self.declare_ordinary(name.name, EntKind::Local(lid), name.span);
+                    let mut plan = None;
+                    if let Some(init) = &id.init {
+                        let (t2, p) = self.initialize(ty, init, false, name.span);
+                        ty = t2;
+                        plan = p;
+                        // The initializer may have completed an array type.
+                        let nat = self.types.align_of(ty);
+                        let l = &mut self.f.as_mut().unwrap().locals[lid.0 as usize];
+                        l.ty = ty;
+                        l.align = l.align.max(nat);
+                    }
                     out.push(HStmt { kind: HStmtKind::Decl { local: lid, init: plan }, span: name.span });
                 }
             }

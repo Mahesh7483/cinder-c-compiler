@@ -901,6 +901,13 @@ fn static_initializers_may_use_addresses() {
 }
 
 #[test]
+fn a_variable_is_in_scope_in_its_own_initializer() {
+    clean("#include <stdlib.h>\nstruct N { int v; }; void f(void) { struct N *n = malloc(sizeof *n); int a[3] = {0}; unsigned long z = sizeof a; free(n); (void)z; }");
+    let m = clean("int p_target; int *p = &p_target; int self_size = sizeof(self_size); static int *q = (int *)&q;");
+    assert_eq!(init_const(&m, "self_size").0, 4);
+}
+
+#[test]
 fn local_initializers_may_be_non_constant() {
     clean("int f(int x) { int a[3] = {x, x + 1, 3}; struct {int p, q;} s = {.q = x}; return a[0] + s.q; }");
 }
