@@ -1,0 +1,25 @@
+uninitialized.c:6:5: warning: variable 'total' is uninitialized when used here [-Wuninitialized]
+   6 |     total += 5;
+     |     ^~~~~
+uninitialized.c:5:9: note: variable 'total' declared here
+   5 |     int total;
+     |         ^~~~~
+uninitialized.c:14:12: warning: variable 'value' may be uninitialized when used here [-Wmaybe-uninitialized]
+  14 |     return value * 2;
+     |            ^~~~~
+uninitialized.c:11:9: note: variable 'value' declared here
+  11 |     int value;
+     |         ^~~~~
+uninitialized.c:21:12: warning: variable 'last' may be uninitialized when used here [-Wmaybe-uninitialized]
+  21 |     return last;
+     |            ^~~~
+uninitialized.c:18:9: note: variable 'last' declared here
+  18 |     int last;
+     |         ^~~~
+uninitialized.c:49:10: warning: variable 'msg' is uninitialized when used here [-Wuninitialized]
+  49 |     puts(msg);
+     |          ^~~
+uninitialized.c:47:11: note: variable 'msg' declared here
+  47 |     char *msg;
+     |           ^~~
+4 warnings generated.

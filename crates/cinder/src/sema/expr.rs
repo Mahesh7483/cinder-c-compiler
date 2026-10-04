@@ -339,6 +339,37 @@ impl<'a> Sema<'a> {
         }
     }
 
+    /// `-Wsign-compare`: a comparison that converts a possibly negative signed
+    /// operand to an unsigned type.
+    fn check_sign_compare(&mut self, l: &HExpr, r: &HExpr, op_span: Span, lspan: Span, rspan: Span) {
+        if !(self.types.is_integer(l.ty) && self.types.is_integer(r.ty)) {
+            return;
+        }
+        let (pl, pr) = (self.types.promote(l.ty), self.types.promote(r.ty));
+        let common = self.types.usual_arith(l.ty, r.ty);
+        if self.types.is_signed(common) {
+            return; // everything is converted to a signed type
+        }
+        let (l_signed, r_signed) = (self.types.is_signed(pl), self.types.is_signed(pr));
+        if l_signed == r_signed {
+            return;
+        }
+        let signed_side = if l_signed { l } else { r };
+        if self.expr_range(signed_side).0 >= 0 {
+            return; // provably non-negative (a constant, an unsigned char promoted to int, ...)
+        }
+        let (a, b) = (self.show(l.ty), self.show(r.ty));
+        self.emit(
+            Diagnostic::warning(
+                Warn::SignCompare,
+                op_span,
+                format!("comparison of integers of different signs: '{}' and '{}'", a, b),
+            )
+            .with_label(lspan)
+            .with_label(rspan),
+        );
+    }
+
     fn check_narrowing(&mut self, e: &HExpr, to: Ty, span: Span) {
         let from = e.ty;
         let t = &self.types;
@@ -371,6 +402,10 @@ impl<'a> Sema<'a> {
                     self.show(to)
                 );
                 self.warn(Warn::Conversion, span, msg);
+            } else if self.types.is_signed(from) != self.types.is_signed(to) {
+                let msg =
+                    format!("implicit conversion changes signedness: '{}' to '{}'", self.show(from), self.show(to));
+                self.warn(Warn::SignConversion, span, msg);
             }
         } else if t.is_floating(from) && t.is_integer(to) {
             if let Some(ConstVal::Float(f)) = eval(&self.types, e) {
@@ -1002,6 +1037,7 @@ impl<'a> Sema<'a> {
                 let (la, ra) = (self.types.is_arithmetic(lt), self.types.is_arithmetic(rt));
                 let (lp, rp) = (self.types.is_pointer(lt), self.types.is_pointer(rt));
                 if la && ra {
+                    self.check_sign_compare(&l, &r, op_span, lhs.span, rhs.span);
                     let (l, r, _) = self.arith_pair(l, r);
                     let e = HExpr::new(HExprKind::Binary(bin_kind(op), Box::new(l), Box::new(r)), int, span);
                     return self.fold(e);

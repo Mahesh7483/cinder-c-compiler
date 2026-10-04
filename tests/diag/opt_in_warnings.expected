@@ -1,0 +1,22 @@
+opt_in_warnings.c:5:23: warning: implicit conversion changes signedness: 'int' to 'unsigned int' [-Wsign-conversion]
+   5 |     unsigned result = value;
+     |                       ^~~~~
+opt_in_warnings.c:9:17: warning: declaration shadows a variable in the global scope [-Wshadow]
+   9 | int shadows(int counter, int limit) {
+     |                 ^~~~~~~
+opt_in_warnings.c:2:5: note: previous declaration is here
+   2 | int counter;
+     |     ^~~~~~~
+opt_in_warnings.c:12:13: warning: declaration shadows a local variable [-Wshadow]
+  12 |         int total = i;
+     |             ^~~~~
+opt_in_warnings.c:10:9: note: previous declaration is here
+  10 |     int total = 0;
+     |         ^~~~~
+opt_in_warnings.c:15:22: warning: if statement has empty body [-Wempty-body]
+  15 |     if (counter > 10);
+     |                      ^
+opt_in_warnings.c:15:22: note: put the semicolon on a separate line to silence this warning
+  15 |     if (counter > 10);
+     |                      ^
+4 warnings generated.

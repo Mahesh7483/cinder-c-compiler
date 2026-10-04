@@ -1,0 +1,4 @@
+missing_include.c:2:10: fatal error: 'does_not_exist.h' file not found
+   2 | #include "does_not_exist.h"
+     |          ^~~~~~~~~~~~~~~~~~
+1 error generated.

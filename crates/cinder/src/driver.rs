@@ -93,7 +93,9 @@ fn use_color(choice: ColorChoice) -> bool {
 
 fn flush_diagnostics(sess: &mut Session, opts: &Options, err: &mut dyn Write) {
     let summary = sess.diags.summary();
-    let diags = sess.diags.take();
+    let mut diags = sess.diags.take();
+    // report in source order (the phases emit theirs in pipeline order); stable for ties
+    diags.sort_by_key(|d| (d.span.file, d.span.lo));
     if opts.diag_json {
         let items: Vec<String> = diags.iter().map(|d| diag::to_json(d, &sess.sources)).collect();
         let _ = writeln!(
@@ -224,6 +226,10 @@ fn compile_c(opts: &Options, input: &str, out: &mut dyn Write, err: &mut dyn Wri
         };
     }
     verify_ir!("after lowering");
+    if opts.mode == Mode::Check {
+        flush_diagnostics(&mut sess, opts, err);
+        return Compiled::Done;
+    }
 
     // `--emit-ir` shows the IR the backend will see, i.e. after the requested -O level
     let opt_cfg = match crate::opt::OptConfig::new(opts.opt_level, &opts.pass_flags) {

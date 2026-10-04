@@ -1,0 +1,52 @@
+warnings.c:4:13: warning: unused function 'unused_helper' [-Wunused-function]
+   4 | static void unused_helper(void) {}
+     |             ^~~~~~~~~~~~~
+warnings.c:8:1: warning: non-void function does not return a value in all control paths [-Wreturn-type]
+   8 | }
+     | ^
+warnings.c:10:32: warning: unused parameter 'unused' [-Wunused-parameter]
+  10 | int unused_param(int used, int unused) { return used; }
+     |                                ^~~~~~
+warnings.c:12:14: warning: unused parameter 'argc' [-Wunused-parameter]
+  12 | int main(int argc, char **argv) {
+     |              ^~~~
+warnings.c:12:27: warning: unused parameter 'argv' [-Wunused-parameter]
+  12 | int main(int argc, char **argv) {
+     |                           ^~~~
+warnings.c:13:9: warning: unused variable 'unused_local' [-Wunused-variable]
+  13 |     int unused_local = 3;
+     |         ^~~~~~~~~~~~
+warnings.c:16:18: warning: implicit conversion loses integer precision: 'long' to 'int' [-Wconversion]
+  16 |     int narrow = big;
+     |                  ^~~
+warnings.c:17:18: warning: implicit conversion from 'int' to 'unsigned int' changes value from -1 to 4294967295 [-Wconstant-conversion]
+  17 |     unsigned u = -1;
+     |                  ^~
+warnings.c:18:14: warning: implicit conversion from 'int' to 'char' changes value from 300 to 44 [-Wconstant-conversion]
+  18 |     char c = 300;
+     |              ^~~
+warnings.c:19:11: warning: using the result of an assignment as a condition without parentheses [-Wparentheses]
+  19 |     if (a = 3) puts("assignment in condition");
+     |           ^
+warnings.c:19:9: note: place parentheses around the assignment to silence this warning
+  19 |     if (a = 3) puts("assignment in condition");
+     |         ^~~~~
+warnings.c:20:5: warning: expression result unused [-Wunused-value]
+  20 |     a + 1;
+     |     ^~~~~
+warnings.c:21:24: warning: implicit conversion loses integer precision: 'int' to 'unsigned short' [-Wconversion]
+  21 |     unsigned short s = a;
+     |                        ^
+warnings.c:23:13: warning: implicit conversion turns floating-point number into integer: 'double' to 'int' [-Wconversion]
+  23 |     int t = d;
+     |             ^
+warnings.c:24:15: warning: implicit conversion loses floating-point precision: 'double' to 'float' [-Wconversion]
+  24 |     float f = d;
+     |               ^
+warnings.c:25:17: warning: comparison of integers of different signs: 'int' and 'unsigned int' [-Wsign-compare]
+  25 |     int cmp = a < u;
+     |               ~ ^ ~
+warnings.c:32:1: warning: unused label 'unused_label' [-Wunused-label]
+  32 | unused_label:
+     | ^~~~~~~~~~~~
+16 warnings generated.

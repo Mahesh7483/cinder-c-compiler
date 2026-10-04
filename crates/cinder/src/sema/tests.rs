@@ -12,8 +12,12 @@ struct R {
 }
 
 fn run(src: &str) -> R {
+    run_with(src, |c| c.enable_all())
+}
+
+fn run_with(src: &str, configure: impl FnOnce(&mut crate::diag::WarnConfig)) -> R {
     let mut sess = Session::new();
-    sess.diags.config.enable_all();
+    configure(&mut sess.diags.config);
     let id = sess.sources.add_file("t.c", None, src.to_string());
     let toks = pp::preprocess(&mut sess, id, &PpOptions::default());
     let tu = parse::parse(&mut sess, toks);
@@ -1039,4 +1043,142 @@ fn hir_dump_shape() {
     assert!(d.contains("Param a#0 : 'int'"), "{d}");
     assert!(d.contains("Binary '+' : 'int'"), "{d}");
     assert!(d.contains("Return"), "{d}");
+}
+
+// ───────────────────────────── uninitialized variables ─────────────────────────────
+
+fn uninit(src: &str) -> Vec<String> {
+    let r = run(src);
+    assert!(r.errors.is_empty(), "errors for {src:?}: {:?}", r.errors);
+    r.warnings.into_iter().filter(|w| w.contains("uninitialized")).collect()
+}
+
+#[test]
+fn uninitialized_read_is_reported_once() {
+    let w = uninit("int f(void) { int x; int y = x + 1; return y + x; }");
+    assert_eq!(w.len(), 1, "{w:?}");
+    assert!(w[0].contains("variable 'x' is uninitialized when used here"), "{w:?}");
+}
+
+#[test]
+fn partially_assigned_variables_may_be_uninitialized() {
+    let w = uninit("int f(int c) { int x; if (c) x = 1; return x; }");
+    assert!(w.len() == 1 && w[0].contains("may be uninitialized"), "{w:?}");
+    let w = uninit("int f(int n) { int x; for (int i = 0; i < n; i++) x = i; return x; }");
+    assert!(w.len() == 1 && w[0].contains("may be uninitialized"), "{w:?}");
+    let w = uninit("int f(int k) { int x; switch (k) { case 0: x = 1; break; case 1: x = 2; break; } return x; }");
+    assert!(w.len() == 1 && w[0].contains("may be uninitialized"), "{w:?}");
+}
+
+#[test]
+fn definitely_assigned_variables_do_not_warn() {
+    assert!(uninit("int f(int c) { int x; if (c) x = 1; else x = 2; return x; }").is_empty());
+    assert!(uninit("int f(int k) { int x; switch (k) { case 0: x = 1; break; default: x = 2; } return x; }").is_empty());
+    assert!(uninit("int f(void) { int x; do { x = 3; } while (x < 0); return x; }").is_empty());
+    assert!(uninit("int f(void) { int x; while (1) { x = 4; break; } return x; }").is_empty());
+    assert!(uninit("int f(int a) { int x; if (a && (x = 5)) return x; return 0; }").is_empty());
+    assert!(uninit("int f(int a) { int x; if (a || (x = 5)) return 0; return x; }").is_empty());
+    assert!(uninit("int f(int a) { int x = a ? (a, 1) : 2; return x; }").is_empty());
+}
+
+#[test]
+fn taking_the_address_counts_as_initializing() {
+    assert!(uninit("int scanf(const char *, ...); int f(void) { int x; scanf(\"%d\", &x); return x; }").is_empty());
+    assert!(uninit("void g(int *); int f(void) { int x; g(&x); return x; }").is_empty());
+}
+
+#[test]
+fn noreturn_calls_end_a_path() {
+    let src = "void abort(void) __attribute__((noreturn)); int f(int k) { int x; switch (k) { case 0: x = 1; break; default: abort(); } return x; }";
+    assert!(uninit(src).is_empty(), "{:?}", uninit(src));
+    assert!(uninit("#include <stdlib.h>\nint f(int k) { int r; if (k) r = 1; else exit(2); return r; }").is_empty());
+}
+
+#[test]
+fn aggregates_params_and_gotos_are_not_tracked() {
+    assert!(uninit("int f(int p) { return p; }").is_empty());
+    assert!(uninit("int f(void) { int a[3]; a[0] = 1; return a[0]; }").is_empty());
+    assert!(uninit("struct S { int a; }; int f(void) { struct S s; s.a = 1; return s.a; }").is_empty());
+    assert!(uninit("int f(int c) { int x; if (c) goto set; return 0; set: x = 1; return x; }").is_empty());
+}
+
+#[test]
+fn self_initialization_and_compound_assignment_read_the_variable() {
+    let w = uninit("int f(void) { int x = x + 1; return x; }");
+    assert!(w.len() == 1 && w[0].contains("'x'"), "{w:?}");
+    let w = uninit("int f(void) { int x; x += 2; return x; }");
+    assert!(w.len() == 1, "{w:?}");
+    let w = uninit("int f(void) { int x; x++; return x; }");
+    assert!(w.len() == 1, "{w:?}");
+}
+
+#[test]
+fn a_variable_declared_in_a_loop_is_fresh_each_iteration() {
+    let w =
+        uninit("int f(int n) { int s = 0; for (int i = 0; i < n; i++) { int t; if (i) s += t; t = i; } return s; }");
+    assert_eq!(w.len(), 1, "{w:?}");
+}
+
+// ───────────────────────────── -Wextra / -Wshadow / -Wsign-conversion ─────────────────────────────
+
+fn extra_warnings(src: &str) -> Vec<String> {
+    let r = run_with(src, |c| c.enable_everything());
+    assert!(r.errors.is_empty(), "errors for {src:?}: {:?}", r.errors);
+    r.warnings
+}
+
+#[test]
+fn unused_parameters_are_reported_only_with_wextra() {
+    let src = "int f(int used, int unused) { return used; }";
+    assert!(warnings(src).is_empty(), "off by default and in -Wall");
+    let w = extra_warnings(src);
+    assert!(w.len() == 1 && w[0] == "unused parameter 'unused'", "{w:?}");
+    assert!(extra_warnings("int f(int) { return 0; }").is_empty(), "unnamed parameters are never unused");
+}
+
+#[test]
+fn sign_compare_flags_possibly_negative_operands() {
+    let w = extra_warnings("int f(int a, unsigned b) { return a < b; }");
+    assert!(
+        w.iter().any(|m| m.contains("comparison of integers of different signs: 'int' and 'unsigned int'")),
+        "{w:?}"
+    );
+    // fine: constants that are not negative, same signedness, promotion of unsigned char, wider signed type
+    for ok in [
+        "int f(unsigned b) { return b < 10; }",
+        "int f(unsigned a, unsigned b) { return a < b; }",
+        "int f(unsigned char c, int i) { return c < i; }",
+        "int f(long a, unsigned b) { return a < b; }",
+        "int f(int a, int b) { return a == b; }",
+    ] {
+        assert!(!extra_warnings(ok).iter().any(|m| m.contains("different signs")), "{ok}");
+    }
+    assert!(extra_warnings("int f(int a) { return a >= 0u; }").iter().any(|m| m.contains("different signs")));
+}
+
+#[test]
+fn sign_conversion_is_off_unless_requested() {
+    let src = "unsigned f(int a) { unsigned u = a; return u; }";
+    assert!(warnings(src).is_empty());
+    let w = extra_warnings(src);
+    assert!(w.iter().any(|m| m.contains("implicit conversion changes signedness: 'int' to 'unsigned int'")), "{w:?}");
+    assert!(!extra_warnings("unsigned f(void) { unsigned u = 5; return u; }").iter().any(|m| m.contains("signedness")));
+}
+
+#[test]
+fn shadowing_locals_and_globals() {
+    let src = "int g; int f(int p) { int x = 1; { int x = 2; p += x; } { int g = 3; p += g; } return x + p; }";
+    assert!(warnings(src).is_empty());
+    let w = extra_warnings(src);
+    assert_eq!(w.iter().filter(|m| m.contains("declaration shadows a local variable")).count(), 1, "{w:?}");
+    assert_eq!(w.iter().filter(|m| m.contains("shadows a variable in the global scope")).count(), 1, "{w:?}");
+    let w = extra_warnings("int n; int f(int n) { return n; }");
+    assert!(w.iter().any(|m| m.contains("shadows a variable in the global scope")), "{w:?}");
+}
+
+#[test]
+fn empty_if_body() {
+    let w = extra_warnings("int f(int a) { if (a); return 1; }");
+    assert!(w.iter().any(|m| m == "if statement has empty body"), "{w:?}");
+    assert!(!extra_warnings("int f(int a) { if (a) {} return 1; }").iter().any(|m| m.contains("empty body")));
 }

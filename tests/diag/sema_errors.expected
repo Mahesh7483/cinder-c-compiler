@@ -1,0 +1,38 @@
+sema_errors.c:12:20: error: use of undeclared identifier 'cuont'; did you mean 'count'?
+  12 |     printf("%d\n", cuont);
+     |                    ^~~~~
+     |                    count
+sema_errors.c:13:11: error: cannot assign to variable 'limit' with const-qualified type 'const int'
+  13 |     limit = 20;
+     |     ~~~~~ ^
+sema_errors.c:14:9: warning: unused variable 'n' [-Wunused-variable]
+  14 |     int n = p;
+     |         ^
+sema_errors.c:14:13: error: initializing 'int' with an expression of incompatible type 'struct point'
+  14 |     int n = p;
+     |             ^
+sema_errors.c:15:10: warning: unused variable 'c' [-Wunused-variable]
+  15 |     char c = count + 300;
+     |          ^
+sema_errors.c:15:14: warning: implicit conversion loses integer precision: 'int' to 'char' [-Wconversion]
+  15 |     char c = count + 300;
+     |              ^~~~~~~~~~~
+sema_errors.c:16:11: warning: unused variable 's' [-Wunused-variable]
+  16 |     char *s = count;
+     |           ^
+sema_errors.c:16:15: warning: incompatible integer to pointer conversion initializing 'char *' with an expression of type 'int' [-Wint-conversion]
+  16 |     char *s = count;
+     |               ^~~~~
+sema_errors.c:17:25: error: too few arguments to function call, expected 2, have 1
+  17 |     count = distance(&p);
+     |             ~~~~~~~~    ^
+sema_errors.c:5:5: note: 'distance' declared here
+   5 | int distance(struct point *a, struct point *b);
+     |     ^~~~~~~~
+sema_errors.c:18:7: error: no member named 'z' in 'struct point'
+  18 |     p.z = 5;
+     |       ^
+sema_errors.c:19:14: error: invalid operands to binary expression ('struct point' and 'int')
+  19 |     return p + 1;
+     |            ~ ^ ~
+5 warnings and 6 errors generated.

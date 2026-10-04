@@ -1,0 +1,31 @@
+preprocessor.c:4:9: warning: 'REDEFINED' macro redefined [-Wmacro-redefined]
+   4 | #define REDEFINED 2
+     |         ^~~~~~~~~
+preprocessor.c:3:9: note: previous definition is here
+   3 | #define REDEFINED 1
+     |         ^~~~~~~~~
+preprocessor.c:10:20: error: too many arguments provided to function-like macro invocation
+  10 | int a = SQUARE(1, 2);
+     |                    ^
+preprocessor.c:1:9: note: macro 'SQUARE' defined here
+   1 | #define SQUARE(x) ((x) * (x))
+     |         ^~~~~~
+preprocessor.c:11:16: error: too few arguments provided to function-like macro invocation
+  11 | int b = TWICE(1);
+     |                ^
+preprocessor.c:2:9: note: macro 'TWICE' defined here
+   2 | #define TWICE(x, y) x + y
+     |         ^~~~~
+preprocessor.c:13:2: warning: #warning this is only a warning [-W#warnings]
+  13 | #warning this is only a warning
+     |  ^~~~~~~
+preprocessor.c:17:2: error: #error stopping here on purpose
+  17 | #error stopping here on purpose
+     |  ^~~~~
+preprocessor.c:20:9: error: unterminated function-like macro invocation
+  20 | int c = SQUARE(;
+     |         ^~~~~~
+preprocessor.c:1:9: note: macro 'SQUARE' defined here
+   1 | #define SQUARE(x) ((x) * (x))
+     |         ^~~~~~
+2 warnings and 4 errors generated.

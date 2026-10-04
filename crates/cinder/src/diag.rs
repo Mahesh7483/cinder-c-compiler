@@ -83,6 +83,7 @@ warn_table! {
     UnusedValue,                 "unused-value", All;
     UnusedLabel,                 "unused-label", All;
     Uninitialized,               "uninitialized", All;
+    MaybeUninitialized,          "maybe-uninitialized", All;
     Parentheses,                 "parentheses", All;
     Conversion,                  "conversion", All;
     UnknownPragmas,              "unknown-pragmas", All;

@@ -1,0 +1,53 @@
+type_errors.c:11:9: warning: unused variable 'too_few' [-Wunused-variable]
+  11 |     int too_few = add(1);
+     |         ^~~~~~~
+type_errors.c:11:25: error: too few arguments to function call, expected 2, have 1
+  11 |     int too_few = add(1);
+     |                   ~~~   ^
+type_errors.c:7:5: note: 'add' declared here
+   7 | int add(int a, int b) { return a + b; }
+     |     ^~~
+type_errors.c:12:9: warning: unused variable 'too_many' [-Wunused-variable]
+  12 |     int too_many = add(1, 2, 3);
+     |         ^~~~~~~~
+type_errors.c:12:30: error: too many arguments to function call, expected 2, have 3
+  12 |     int too_many = add(1, 2, 3);
+     |                    ~~~       ^
+type_errors.c:7:5: note: 'add' declared here
+   7 | int add(int a, int b) { return a + b; }
+     |     ^~~
+type_errors.c:13:7: error: no member named 'z' in 'struct point'
+  13 |     p.z = 4;
+     |       ^
+type_errors.c:15:7: error: cannot assign to variable 'k' with const-qualified type 'const int'
+  15 |     k = 2;
+     |     ~ ^
+type_errors.c:16:10: warning: unused variable 'ip' [-Wunused-variable]
+  16 |     int *ip = &p;
+     |          ^~
+type_errors.c:16:15: warning: incompatible pointer types initializing 'int *' with an expression of type 'struct point *' [-Wincompatible-pointer-types]
+  16 |     int *ip = &p;
+     |               ^~
+type_errors.c:17:11: warning: unused variable 's' [-Wunused-variable]
+  17 |     char *s = 5;
+     |           ^
+type_errors.c:17:15: warning: incompatible integer to pointer conversion initializing 'char *' with an expression of type 'int' [-Wint-conversion]
+  17 |     char *s = 5;
+     |               ^
+type_errors.c:18:17: error: use of undeclared identifier 'coutn'; did you mean 'count'?
+  18 |     int total = coutn + 1;
+     |                 ^~~~~
+     |                 count
+type_errors.c:19:5: warning: call to undeclared function 'undefined_fn'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  19 |     undefined_fn(3);
+     |     ^~~~~~~~~~~~
+type_errors.c:20:9: warning: unused variable 'bad_sum' [-Wunused-variable]
+  20 |     int bad_sum = p + 1;
+     |         ^~~~~~~
+type_errors.c:20:21: error: invalid operands to binary expression ('struct point' and 'int')
+  20 |     int bad_sum = p + 1;
+     |                   ~ ^ ~
+type_errors.c:21:12: error: indirection requires pointer operand ('int' invalid)
+  21 |     return *total;
+     |            ^~~~~~
+8 warnings and 7 errors generated.

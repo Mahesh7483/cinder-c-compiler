@@ -119,6 +119,12 @@ impl<'a> Sema<'a> {
                 }
             }
             StmtKind::If { cond, then, els } => {
+                if matches!(then.kind, StmtKind::Empty) {
+                    self.emit(
+                        Diagnostic::warning(Warn::EmptyBody, then.span, "if statement has empty body")
+                            .with_note(then.span, "put the semicolon on a separate line to silence this warning"),
+                    );
+                }
                 let c = self.condition(cond, "if");
                 let t = self.scoped_stmt(then);
                 let e = els.as_ref().map(|x| Box::new(self.scoped_stmt(x)));

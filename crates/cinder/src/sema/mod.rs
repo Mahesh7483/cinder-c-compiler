@@ -13,6 +13,7 @@ mod init;
 mod stmt;
 #[cfg(test)]
 mod tests;
+mod uninit;
 
 use crate::ast::*;
 use crate::diag::{Diagnostic, Warn};
@@ -295,6 +296,25 @@ impl<'a> Sema<'a> {
 
     fn in_function(&self) -> bool {
         self.f.is_some()
+    }
+
+    /// `-Wshadow`: a new local or parameter that hides a variable of an enclosing scope.
+    fn check_shadow(&mut self, name: Ident) {
+        if !self.sess.diags.config.is_enabled(Warn::Shadow) || self.scopes.len() < 2 {
+            return;
+        }
+        let outer = self.scopes.len() - 1;
+        let found = self.scopes[..outer].iter().rev().find_map(|s| s.ordinary.get(&name.name)).cloned();
+        let Some(ent) = found else { return };
+        let what = match ent.kind {
+            EntKind::Local(_) => "a local variable",
+            EntKind::Global(sid) if self.syms[sid.0 as usize].kind == SymKind::Var => "a variable in the global scope",
+            _ => return,
+        };
+        self.emit(
+            Diagnostic::warning(Warn::Shadow, name.span, format!("declaration shadows {}", what))
+                .with_note(ent.span, "previous declaration is here"),
+        );
     }
 
     fn declare_ordinary(&mut self, name: Symbol, kind: EntKind, span: Span) {
@@ -1241,6 +1261,7 @@ impl<'a> Sema<'a> {
                             self.error(name.span, "variable length array may not be initialized");
                         }
                         let natural = self.types.align_of(ty);
+                        self.check_shadow(name);
                         let lid = self.new_local(name.name, ty, name.span, false, align.max(natural));
                         if Self::has_attr(&d.specs.attrs, "unused") || Self::has_attr(&decl.attrs, "unused") {
                             self.f.as_mut().unwrap().locals[lid.0 as usize].used = true;
@@ -1255,6 +1276,7 @@ impl<'a> Sema<'a> {
                     }
                     let natural = if self.types.is_complete(ty) { self.types.align_of(ty) } else { 1 };
                     // In scope in its own initializer (`T *p = malloc(sizeof *p);`).
+                    self.check_shadow(name);
                     let lid = self.new_local(name.name, ty, name.span, false, align.max(natural));
                     if Self::has_attr(&d.specs.attrs, "unused") || Self::has_attr(&decl.attrs, "unused") {
                         self.f.as_mut().unwrap().locals[lid.0 as usize].used = true;
@@ -1348,6 +1370,7 @@ impl<'a> Sema<'a> {
                 if self.scopes.last().unwrap().ordinary.contains_key(&n.name) {
                     self.error(n.span, format!("redefinition of parameter '{}'", n.name));
                 }
+                self.check_shadow(n);
                 self.declare_ordinary(n.name, EntKind::Local(id), n.span);
             }
             param_ids.push(id);
@@ -1385,6 +1408,18 @@ impl<'a> Sema<'a> {
         };
         self.pop_scope();
         let ctx = self.f.take().unwrap();
+        if self.sess.diags.config.is_enabled(Warn::UnusedParameter) {
+            for l in ctx.locals.iter().filter(|l| l.is_param && !l.used && !l.name.as_str().is_empty()) {
+                self.warn(Warn::UnusedParameter, l.span, format!("unused parameter '{}'", l.name));
+            }
+        }
+        let cfg = &self.sess.diags.config;
+        if cfg.is_enabled(Warn::Uninitialized) || cfg.is_enabled(Warn::MaybeUninitialized) {
+            for fnd in uninit::analyze(&body, &ctx.locals, &self.types, &self.syms) {
+                let note = format!("variable '{}' declared here", fnd.name);
+                self.emit(Diagnostic::warning(fnd.flag, fnd.span, fnd.message).with_note(fnd.declared, note));
+            }
+        }
         // Labels: every goto target must be defined; unused labels warn.
         let mut label_names = Vec::new();
         for l in &ctx.labels {

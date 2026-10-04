@@ -1,0 +1,26 @@
+recovery.c:4:16: error: expected ';' at end of declaration
+   4 |     int sum = 0
+     |                ^
+     |                ;
+recovery.c:11:13: error: expected expression
+  11 |     int x = ;
+     |             ^
+recovery.c:12:18: error: expected ')'
+  12 |     return (x + 1;
+     |                  ^
+     |                  )
+recovery.c:12:12: note: to match this '('
+  12 |     return (x + 1;
+     |            ^
+recovery.c:15:24: error: expected ';' at end of declaration list
+  15 | struct Point { int x, y }
+     |                        ^
+     |                        ;
+recovery.c:15:26: error: expected ';' after struct
+  15 | struct Point { int x, y }
+     |                          ^
+     |                          ;
+recovery.c:18:5: error: unknown type name 'foo_t'
+  18 |     foo_t value;
+     |     ^~~~~
+6 errors generated.

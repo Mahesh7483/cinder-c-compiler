@@ -17,6 +17,8 @@ pub enum Mode {
     Preprocess,
     /// `--emit-ast`: print the syntax tree.
     Ast,
+    /// `-fsyntax-only`: run the front end (and lowering, for its diagnostics) and stop.
+    Check,
     /// `--emit-hir`: print the typed tree with all implicit conversions explicit.
     Hir,
     /// `--emit-ir`: print the SSA IR (after the selected optimization level).
@@ -99,6 +101,7 @@ OPTIONS:
   -l<lib> -L<dir>       Passed to the linker
   -static               Link statically
   --emit-ast            Print the abstract syntax tree
+  -fsyntax-only         Check the program and report diagnostics; produce no output
   --emit-hir            Print the typed tree (types and implicit conversions made explicit)
   --emit-ir             Print the SSA intermediate representation
   --color=<auto|always|never>
@@ -129,6 +132,7 @@ pub fn parse_args(args: &[String]) -> Result<Cli, String> {
             "-S" => o.mode = Mode::Asm,
             "-E" => o.mode = Mode::Preprocess,
             "--emit-ast" => o.mode = Mode::Ast,
+            "-fsyntax-only" => o.mode = Mode::Check,
             "--emit-hir" => o.mode = Mode::Hir,
             "--emit-ir" => o.mode = Mode::Ir,
             "-O0" => o.opt_level = 0,
