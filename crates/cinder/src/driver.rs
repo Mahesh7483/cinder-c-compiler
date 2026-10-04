@@ -110,10 +110,26 @@ fn compile_one(opts: &Options, input: &str, out: &mut dyn Write, err: &mut dyn W
         return i32::from(sess.diags.has_errors());
     }
 
+    if sess.diags.is_fatal() {
+        flush_diagnostics(&mut sess, opts, err);
+        return 1;
+    }
+    let tu = crate::parse::parse(&mut sess, toks);
+    if opts.mode == Mode::Ast {
+        if !sess.diags.has_errors() {
+            let text = crate::ast_dump::dump(&sess.sources, &tu);
+            if let Err(code) = write_output(opts, text.as_bytes(), out, err) {
+                return code;
+            }
+        }
+        flush_diagnostics(&mut sess, opts, err);
+        return i32::from(sess.diags.has_errors());
+    }
+
     if !sess.diags.has_errors() {
         sess.diags.error(
             crate::source::Span::DUMMY,
-            "parsing and code generation are not yet supported (only -E works so far)",
+            "semantic analysis and code generation are not yet supported (only -E and --emit-ast work so far)",
         );
     }
     flush_diagnostics(&mut sess, opts, err);

@@ -3,6 +3,8 @@
 //! The pipeline is documented stage by stage under `docs/`; the module layout
 //! mirrors it.
 
+pub mod ast;
+pub mod ast_dump;
 pub mod diag;
 pub mod driver;
 pub mod headers;
@@ -10,6 +12,7 @@ pub mod intern;
 pub mod lex;
 pub mod literal;
 pub mod options;
+pub mod parse;
 pub mod pp;
 pub mod session;
 pub mod source;
