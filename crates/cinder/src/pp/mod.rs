@@ -50,7 +50,13 @@ pub struct PpOptions {
     pub restrict_includes: bool,
     pub defines: Vec<MacroCmd>,
     pub opt_level: u8,
+    /// Work budget for macro expansion (tokens produced); `None` = [`DEFAULT_EXPANSION_BUDGET`].
+    pub max_expansion_tokens: Option<u64>,
 }
+
+/// Far beyond any real translation unit, yet small enough that an exponential macro
+/// (`#define B(x) A(A(x))` ...) fails fast with a diagnostic instead of eating memory.
+pub const DEFAULT_EXPANSION_BUDGET: u64 = 1_000_000;
 
 #[derive(Debug)]
 enum MacroKind {
@@ -98,6 +104,9 @@ pub struct Preprocessor<'s> {
     counter: u32,
     /// Includes currently open (excluding the prelude).
     depth: usize,
+    /// Tokens produced by macro expansion so far, and whether the budget ran out.
+    expanded: u64,
+    overflowed: bool,
 }
 
 struct Resolved {
@@ -166,6 +175,25 @@ impl<'s> Preprocessor<'s> {
             tok_cache: HashMap::new(),
             counter: 0,
             depth: 0,
+            expanded: 0,
+            overflowed: false,
+        }
+    }
+
+    /// Account for `n` tokens of macro-expansion work; once the budget is spent, report it once
+    /// and make every further macro expand to nothing.
+    fn charge(&mut self, n: usize, span: Span) {
+        self.expanded = self.expanded.saturating_add(n as u64);
+        let limit = self.opts.max_expansion_tokens.unwrap_or(DEFAULT_EXPANSION_BUDGET);
+        if self.expanded > limit && !self.overflowed {
+            self.overflowed = true;
+            self.sess.diags.emit(Diagnostic::error(
+                span,
+                format!(
+                    "macro expansion produced too many tokens (limit {}); is a macro expanding exponentially?",
+                    limit
+                ),
+            ));
         }
     }
 
@@ -948,6 +976,12 @@ impl<'s> Preprocessor<'s> {
     }
 
     fn push_expansion(&mut self, toks: Vec<Token>) {
+        if let Some(first) = toks.first() {
+            self.charge(toks.len(), first.span);
+        }
+        if self.overflowed {
+            return;
+        }
         self.pending.extend(toks.into_iter().rev());
     }
 
@@ -962,6 +996,9 @@ impl<'s> Preprocessor<'s> {
             return true;
         }
         let Some(m) = self.macros.get(&name).cloned() else { return false };
+        if self.overflowed {
+            return true; // budget exhausted: drop the macro use, keep scanning so the error stands alone
+        }
         match &m.kind {
             MacroKind::Object => {
                 let hide = hs_union(&tok.hide, &single(name));
@@ -1184,6 +1221,10 @@ impl<'s> Preprocessor<'s> {
                     cache[pi] = Some(e);
                 }
                 let mut e = cache[pi].clone().unwrap();
+                self.charge(e.len(), call.span);
+                if self.overflowed {
+                    return out;
+                }
                 if let Some(f) = e.first_mut() {
                     f.flags = (f.flags & !SPACE) | (t.flags & SPACE);
                 }

@@ -563,3 +563,23 @@ fn restricted_includes_refuse_paths_that_escape() {
     let r = run_opts("#include <stdio.h>\nint x;", opts);
     assert!(r.errors.is_empty(), "{:?}", r.errors);
 }
+
+#[test]
+fn exponential_macros_hit_the_expansion_budget() {
+    // 10^8 tokens if expanded in full: must stop with one clear error, quickly
+    let src = "#define A(x) x x x x x x x x x x\n#define B(x) A(A(x))\n#define C(x) B(B(x))\n#define D(x) C(C(x))\nint v = D(1 +) 0;\nint after;";
+    let o = run_opts(src, PpOptions { max_expansion_tokens: Some(50_000), ..PpOptions::default() });
+    assert_eq!(o.errors.len(), 1, "{:?}", o.errors);
+    assert!(o.errors[0].contains("macro expansion produced too many tokens"), "{:?}", o.errors);
+    assert!(o.toks.contains("after"), "scanning continues after the error: {}", o.toks);
+}
+
+#[test]
+fn ordinary_heavy_macro_use_stays_within_the_default_budget() {
+    let mut src = String::from("#define SQ(x) ((x) * (x))\n#define QUAD(x) SQ(SQ(x))\nint s = 0;\n");
+    for i in 0..1500 {
+        src.push_str(&format!("int f{i}(int a) {{ return QUAD(a + {i}); }}\n"));
+    }
+    let o = run(&src);
+    assert!(o.errors.is_empty(), "{:?}", o.errors);
+}

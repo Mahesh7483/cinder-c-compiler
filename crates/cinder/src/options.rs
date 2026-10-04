@@ -112,6 +112,9 @@ OPTIONS:
   --color=<auto|always|never>
   --diagnostics-format=<text|json>
   -ferror-limit=<n>     Stop after n errors (0 = no limit)
+  -fmacro-expansion-limit=<n>
+                        Tokens one translation unit may produce by macro expansion (default 1000000;
+                        0 = no limit); guards against exponentially expanding macros
   -v                    Print the commands that are run
   --version             Print the version
   --help                Print this help
@@ -211,6 +214,11 @@ pub fn parse_args(args: &[String]) -> Result<Cli, String> {
                 "text" => o.diag_json = false,
                 other => return Err(format!("invalid value '{}' in '--diagnostics-format'", other)),
             },
+            _ if a.starts_with("-fmacro-expansion-limit=") => {
+                let n: u64 =
+                    a["-fmacro-expansion-limit=".len()..].parse().map_err(|_| format!("invalid value in '{}'", a))?;
+                o.pp.max_expansion_tokens = Some(if n == 0 { u64::MAX } else { n });
+            }
             _ if a.starts_with("-ferror-limit=") => {
                 o.error_limit = a["-ferror-limit=".len()..].parse().map_err(|_| format!("invalid value in '{}'", a))?;
             }
@@ -347,5 +355,9 @@ mod tests {
         assert_eq!(o.color, ColorChoice::Always);
         assert!(o.diag_json);
         assert_eq!(o.error_limit, 5);
+        assert_eq!(parse(&["-fmacro-expansion-limit=500"]).pp.max_expansion_tokens, Some(500));
+        assert_eq!(parse(&["-fmacro-expansion-limit=0"]).pp.max_expansion_tokens, Some(u64::MAX));
+        assert_eq!(parse(&[]).pp.max_expansion_tokens, None);
+        assert!(parse_args(&["-fmacro-expansion-limit=many".to_string()]).is_err());
     }
 }
