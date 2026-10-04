@@ -210,21 +210,43 @@ fn compile_c(opts: &Options, input: &str, out: &mut dyn Write, err: &mut dyn Wri
         emit_text!(text);
     }
 
-    let module = crate::lower::lower_module(&mut sess, &hir, input);
+    let mut module = crate::lower::lower_module(&mut sess, &hir, input);
     stop_on_errors!();
-    if let Err(errs) = crate::ir::verify::verify_module(&module) {
-        for e in errs {
-            sess.diags.error(Span::DUMMY, format!("internal compiler error: invalid IR: {}", e));
+    macro_rules! verify_ir {
+        ($stage:expr) => {
+            if let Err(errs) = crate::ir::verify::verify_module(&module) {
+                for e in errs {
+                    sess.diags.error(Span::DUMMY, format!("internal compiler error: invalid IR {}: {}", $stage, e));
+                }
+                flush_diagnostics(&mut sess, opts, err);
+                return Compiled::Failed;
+            }
+        };
+    }
+    verify_ir!("after lowering");
+
+    // `--emit-ir` shows the IR the backend will see, i.e. after the requested -O level
+    let opt_cfg = match crate::opt::OptConfig::new(opts.opt_level, &opts.pass_flags) {
+        Ok(c) => c,
+        Err(e) => {
+            sess.diags.error(Span::DUMMY, e);
+            flush_diagnostics(&mut sess, opts, err);
+            return Compiled::Failed;
         }
-        flush_diagnostics(&mut sess, opts, err);
-        return Compiled::Failed;
+    };
+    crate::opt::optimize(&mut module, &opt_cfg);
+    if opts.opt_level > 0 {
+        verify_ir!("after optimization");
     }
     if opts.mode == Mode::Ir {
         let text = crate::ir::print::print_module(&module);
         emit_text!(text);
     }
 
-    let asm = backend::compile_module(&module, &BackendOptions::default());
+    let asm = backend::compile_module(
+        &module,
+        &BackendOptions { peephole: opt_cfg.is_enabled("peephole"), ..BackendOptions::default() },
+    );
     flush_diagnostics(&mut sess, opts, err);
     Compiled::Asm(asm)
 }

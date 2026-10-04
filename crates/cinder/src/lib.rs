@@ -17,6 +17,7 @@ pub mod ir;
 pub mod lex;
 pub mod literal;
 pub mod lower;
+pub mod opt;
 pub mod options;
 pub mod parse;
 pub mod pp;
