@@ -6,6 +6,7 @@
 pub mod abi;
 pub mod ast;
 pub mod ast_dump;
+pub mod backend;
 pub mod diag;
 pub mod driver;
 pub mod headers;

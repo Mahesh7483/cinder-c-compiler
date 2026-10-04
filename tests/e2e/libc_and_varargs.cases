@@ -1,0 +1,382 @@
+//// case: function_pointers
+#include <stdio.h>
+static int add(int a, int b) { return a + b; }
+static int sub(int a, int b) { return a - b; }
+static int apply(int (*f)(int, int), int a, int b) { return f(a, b); }
+typedef int (*binop)(int, int);
+int main(void) {
+    int (*fp)(int, int) = add;
+    printf("%d %d\n", fp(3, 4), apply(sub, 10, 3));
+    binop ops[2] = {add, sub};
+    for (int i = 0; i < 2; i++) printf("%d ", ops[i](20, 5));
+    printf("\n");
+    fp = &sub;
+    printf("%d %d\n", (*fp)(9, 1), apply(fp, 1, 9));
+    return 0;
+}
+//// stdout
+7 7
+25 15 
+8 -8
+//// case: callbacks_and_qsort
+#include <stdio.h>
+#include <stdlib.h>
+static int cmp_asc(const void *a, const void *b) { return *(const int *)a - *(const int *)b; }
+static int cmp_desc(const void *a, const void *b) { return *(const int *)b - *(const int *)a; }
+int main(void) {
+    int v[] = {5, 2, 9, 1, 7, 3, 8, 3};
+    int n = sizeof v / sizeof v[0];
+    qsort(v, n, sizeof v[0], cmp_asc);
+    for (int i = 0; i < n; i++) printf("%d ", v[i]);
+    printf("\n");
+    qsort(v, n, sizeof v[0], cmp_desc);
+    for (int i = 0; i < n; i++) printf("%d ", v[i]);
+    printf("\n");
+    qsort(v, n, sizeof v[0], cmp_asc);
+    int key = 7;
+    int *hit = bsearch(&key, v, n, sizeof v[0], cmp_asc);
+    printf("%d %ld\n", hit ? *hit : -1, hit ? (long)(hit - v) : -1L);
+    return 0;
+}
+//// stdout
+1 2 3 3 5 7 8 9 
+9 8 7 5 3 3 2 1 
+7 5
+//// case: malloc_free_calloc_realloc
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+int main(void) {
+    int *a = malloc(5 * sizeof *a);
+    for (int i = 0; i < 5; i++) a[i] = i * 10;
+    a = realloc(a, 10 * sizeof *a);
+    for (int i = 5; i < 10; i++) a[i] = i * 10;
+    long s = 0;
+    for (int i = 0; i < 10; i++) s += a[i];
+    printf("%ld\n", s);
+    free(a);
+    int *z = calloc(8, sizeof *z);
+    int allzero = 1;
+    for (int i = 0; i < 8; i++) if (z[i]) allzero = 0;
+    printf("%d\n", allzero);
+    free(z);
+    char *s2 = malloc(16);
+    strcpy(s2, "dynamic");
+    printf("%s %zu\n", s2, strlen(s2));
+    free(s2);
+    return 0;
+}
+//// stdout
+450
+1
+dynamic 7
+//// case: string_library
+#include <stdio.h>
+#include <string.h>
+int main(void) {
+    char a[32] = "hello";
+    char b[32];
+    strcpy(b, a);
+    strcat(b, " world");
+    printf("%s|%zu|%d|%d\n", b, strlen(b), strcmp(a, b) < 0, strcmp(b, b));
+    printf("%d %d\n", strncmp("abcdef", "abcxyz", 3), strncmp("abcdef", "abcxyz", 4) < 0);
+    char *p = strchr(b, 'o');
+    char *q = strrchr(b, 'o');
+    printf("%ld %ld\n", (long)(p - b), (long)(q - b));
+    char *r = strstr(b, "wor");
+    printf("%s\n", r);
+    char buf[16];
+    memset(buf, 'x', 5);
+    buf[5] = 0;
+    printf("%s\n", buf);
+    memcpy(buf, "AB", 2);
+    printf("%s %d\n", buf, memcmp("abc", "abd", 3) < 0);
+    return 0;
+}
+//// stdout
+hello world|11|1|0
+0 1
+4 7
+world
+xxxxx
+ABxxx 1
+//// case: sprintf_and_snprintf
+#include <stdio.h>
+int main(void) {
+    char buf[64];
+    int n = sprintf(buf, "%d-%s-%c-%x", 42, "abc", 'Z', 255);
+    printf("%s %d\n", buf, n);
+    n = snprintf(buf, 8, "%s", "truncate me please");
+    printf("%s %d\n", buf, n);
+    snprintf(buf, sizeof buf, "%5.2f|%-6d|%06d|%+d", 3.14159, 42, 42, 42);
+    printf("%s\n", buf);
+    return 0;
+}
+//// stdout
+42-abc-Z-ff 11
+truncat 18
+ 3.14|42    |000042|+42
+//// case: printf_formats
+#include <stdio.h>
+int main(void) {
+    printf("%d %i %u %o %x %X\n", -5, 6, 7u, 64, 255, 255);
+    printf("%5d|%-5d|%05d|%+d|% d\n", 42, 42, 42, 42, 42);
+    printf("%c %s %5s|%-5s|%.2s\n", 'A', "str", "ab", "ab", "abcdef");
+    printf("%ld %lu %lld %llu\n", -1L, 1UL, -2LL, 3ULL);
+    printf("%zu %p\n", sizeof(int), (void *)0);
+    printf("%%|%5.1f|%e|%g\n", 3.14159, 12345.678, 0.5);
+    printf("%hd %hhd %hu\n", (short)70000, (char)200, (unsigned short)70000);
+    return 0;
+}
+//// stdout
+-5 6 7 100 ff FF
+   42|42   |00042|+42| 42
+A str    ab|ab   |ab
+-1 1 -2 3
+4 (nil)
+%|  3.1|1.234568e+04|0.5
+4464 -56 4464
+//// case: variadic_sum
+#include <stdio.h>
+#include <stdarg.h>
+static int sum(int n, ...) {
+    va_list ap;
+    va_start(ap, n);
+    int t = 0;
+    for (int i = 0; i < n; i++) t += va_arg(ap, int);
+    va_end(ap);
+    return t;
+}
+static double avg(int n, ...) {
+    va_list ap;
+    va_start(ap, n);
+    double t = 0;
+    for (int i = 0; i < n; i++) t += va_arg(ap, double);
+    va_end(ap);
+    return t / n;
+}
+int main(void) {
+    printf("%d %d %d\n", sum(0), sum(3, 1, 2, 3), sum(10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10));
+    printf("%.2f %.2f\n", avg(2, 1.0, 2.0), avg(9, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0));
+    return 0;
+}
+//// stdout
+0 6 55
+1.50 5.00
+//// case: variadic_mixed_types
+#include <stdio.h>
+#include <stdarg.h>
+static void show(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    for (const char *p = fmt; *p; p++) {
+        switch (*p) {
+        case 'i': printf("i%d ", va_arg(ap, int)); break;
+        case 'l': printf("l%ld ", va_arg(ap, long)); break;
+        case 'd': printf("d%.1f ", va_arg(ap, double)); break;
+        case 's': printf("s%s ", va_arg(ap, const char *)); break;
+        case 'c': printf("c%c ", va_arg(ap, int)); break;
+        }
+    }
+    va_end(ap);
+    printf("\n");
+}
+int main(void) {
+    show("ildsc", 1, 2000000000000L, 2.5, "str", 'x');
+    show("iiiiiiiiiidddddddddd", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0);
+    show("sdisdi", "a", 0.5, 7, "b", 1.5, 8);
+    return 0;
+}
+//// stdout
+i1 l2000000000000 d2.5 sstr cx 
+i1 i2 i3 i4 i5 i6 i7 i8 i9 i10 d1.0 d2.0 d3.0 d4.0 d5.0 d6.0 d7.0 d8.0 d9.0 d10.0 
+sa d0.5 i7 sb d1.5 i8 
+//// case: vprintf_wrapper
+#include <stdio.h>
+#include <stdarg.h>
+static int log_msg(const char *level, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    printf("[%s] ", level);
+    int n = vprintf(fmt, ap);
+    va_end(ap);
+    printf("\n");
+    return n;
+}
+static void copy_test(int n, ...) {
+    va_list a, b;
+    va_start(a, n);
+    va_copy(b, a);
+    int s1 = 0, s2 = 0;
+    for (int i = 0; i < n; i++) s1 += va_arg(a, int);
+    for (int i = 0; i < n; i++) s2 += va_arg(b, int) * 2;
+    va_end(a); va_end(b);
+    printf("%d %d\n", s1, s2);
+}
+int main(void) {
+    int n = log_msg("INFO", "x=%d y=%s z=%.1f", 5, "hi", 2.5);
+    printf("%d\n", n);
+    copy_test(4, 1, 2, 3, 4);
+    return 0;
+}
+//// stdout
+[INFO] x=5 y=hi z=2.5
+14
+10 20
+//// case: scanf_and_stdin
+#include <stdio.h>
+int main(void) {
+    int a, b;
+    char word[32];
+    double d;
+    if (scanf("%d %d %31s %lf", &a, &b, word, &d) == 4)
+        printf("%d %d %s %.2f %d\n", a, b, word, d, a * b);
+    int c;
+    long total = 0;
+    while ((c = getchar()) != EOF) if (c >= '0' && c <= '9') total += c - '0';
+    printf("%ld\n", total);
+    return 0;
+}
+//// stdin
+6 7 hello 2.5
+digits 123 and 45
+//// stdout
+6 7 hello 2.50 42
+15
+//// case: atoi_strtol_atof
+#include <stdio.h>
+#include <stdlib.h>
+int main(void) {
+    printf("%d %ld %ld\n", atoi("123abc"), strtol("ff", NULL, 16), strtol("-0777", NULL, 0));
+    char *end;
+    long v = strtol("42 rest", &end, 10);
+    printf("%ld [%s]\n", v, end);
+    printf("%.2f %.2f\n", atof("3.75"), strtod("1e3x", &end));
+    printf("%d %d %d\n", abs(-5), (int)labs(-7L), abs(3));
+    div_t q = div(17, 5);
+    printf("%d %d\n", q.quot, q.rem);
+    return 0;
+}
+//// stdout
+123 255 -511
+42 [ rest]
+3.75 1000.00
+5 7 3
+3 2
+//// case: exit_and_atexit
+#include <stdio.h>
+#include <stdlib.h>
+static void bye(void) { printf("bye\n"); }
+int main(void) {
+    atexit(bye);
+    printf("running\n");
+    if (1) exit(3);
+    printf("unreachable\n");
+    return 0;
+}
+//// exit: 3
+//// stdout
+running
+bye
+//// case: rand_and_srand
+#include <stdio.h>
+#include <stdlib.h>
+int main(void) {
+    srand(1);
+    int a = rand(), b = rand();
+    srand(1);
+    int c = rand(), d = rand();
+    printf("%d %d\n", a == c, b == d);
+    printf("%d\n", a >= 0 && a <= RAND_MAX);
+    return 0;
+}
+//// stdout
+1 1
+1
+//// case: ctype_functions
+#include <stdio.h>
+#include <ctype.h>
+int main(void) {
+    const char *s = "Hello, World 42!";
+    int up = 0, lo = 0, dg = 0, sp = 0, pu = 0;
+    for (const char *p = s; *p; p++) {
+        if (isupper((unsigned char)*p)) up++;
+        if (islower((unsigned char)*p)) lo++;
+        if (isdigit((unsigned char)*p)) dg++;
+        if (isspace((unsigned char)*p)) sp++;
+        if (ispunct((unsigned char)*p)) pu++;
+    }
+    printf("%d %d %d %d %d\n", up, lo, dg, sp, pu);
+    printf("%c %c\n", toupper('a'), tolower('Z'));
+    return 0;
+}
+//// stdout
+2 8 2 2 2
+A z
+//// case: array_of_pointers_and_2d
+#include <stdio.h>
+int main(void) {
+    const char *names[] = {"zero", "one", "two", "three"};
+    for (int i = 0; i < 4; i++) printf("%s:%zu ", names[i], sizeof names[i]);
+    printf("\n");
+    int grid[3][3] = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+    int (*row)[3] = grid;
+    printf("%d %d %d\n", row[1][1], (*(row + 2))[0], *(*(grid + 0) + 2));
+    int *flat = &grid[0][0];
+    int t = 0;
+    for (int i = 0; i < 9; i++) t += flat[i];
+    printf("%d\n", t);
+    char *argv[] = {"prog", "-v", 0};
+    int argc = 0;
+    while (argv[argc]) argc++;
+    printf("%d\n", argc);
+    return 0;
+}
+//// stdout
+zero:8 one:8 two:8 three:8 
+5 7 3
+45
+2
+//// case: string_literal_pointer_equality_and_arrays
+#include <stdio.h>
+int main(void) {
+    char a[] = "abc";
+    char *b = "abc";
+    a[0] = 'X';
+    printf("%s %s %zu %zu\n", a, b, sizeof a, sizeof b);
+    char two[2][4] = {"ab", "cde"};
+    printf("%s %s %c\n", two[0], two[1], two[1][2]);
+    printf("%c\n", "hello"[1]);
+    printf("%s\n", "con" "cat" "enated");
+    return 0;
+}
+//// stdout
+Xbc abc 4 8
+ab cde e
+e
+concatenated
+//// case: void_pointer_and_casts
+#include <stdio.h>
+#include <string.h>
+static void fill(void *p, int c, size_t n) { unsigned char *b = p; while (n--) *b++ = (unsigned char)c; }
+int main(void) {
+    int x[4];
+    fill(x, 0xFF, sizeof x);
+    printf("%d %u\n", x[0], (unsigned)x[3]);
+    long v = 0x0102030405060708L;
+    unsigned char *b = (unsigned char *)&v;
+    printf("%d %d\n", b[0], b[7]);
+    void *vp = &v;
+    long *lp = vp;
+    printf("%lx\n", *lp);
+    double d = 1.5;
+    unsigned long bits;
+    memcpy(&bits, &d, sizeof bits);
+    printf("%lx\n", bits);
+    return 0;
+}
+//// stdout
+-1 4294967295
+8 1
+102030405060708
+3ff8000000000000

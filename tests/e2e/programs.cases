@@ -1,0 +1,670 @@
+//// case: sieve_of_eratosthenes
+#include <stdio.h>
+#define N 200
+int main(void) {
+    char composite[N + 1] = {0};
+    int count = 0;
+    for (int i = 2; i <= N; i++) {
+        if (composite[i]) continue;
+        count++;
+        for (int j = i * i; j <= N; j += i) composite[j] = 1;
+    }
+    printf("%d primes up to %d\n", count, N);
+    for (int i = 2; i < 60; i++) if (!composite[i]) printf("%d ", i);
+    printf("\n");
+    return 0;
+}
+//// stdout
+46 primes up to 200
+2 3 5 7 11 13 17 19 23 29 31 37 41 43 47 53 59 
+//// case: matrix_multiply
+#include <stdio.h>
+#define N 4
+int main(void) {
+    double a[N][N], b[N][N], c[N][N];
+    for (int i = 0; i < N; i++) for (int j = 0; j < N; j++) { a[i][j] = i + j; b[i][j] = i == j ? 2.0 : 0.5; c[i][j] = 0; }
+    for (int i = 0; i < N; i++)
+        for (int j = 0; j < N; j++)
+            for (int k = 0; k < N; k++) c[i][j] += a[i][k] * b[k][j];
+    for (int i = 0; i < N; i++) { for (int j = 0; j < N; j++) printf("%6.2f ", c[i][j]); printf("\n"); }
+    return 0;
+}
+//// stdout
+  3.00   4.50   6.00   7.50 
+  6.50   8.00   9.50  11.00 
+ 10.00  11.50  13.00  14.50 
+ 13.50  15.00  16.50  18.00 
+//// case: bubble_and_insertion_sort
+#include <stdio.h>
+static void bubble(int *a, int n) {
+    for (int i = 0; i < n - 1; i++)
+        for (int j = 0; j < n - 1 - i; j++)
+            if (a[j] > a[j + 1]) { int t = a[j]; a[j] = a[j + 1]; a[j + 1] = t; }
+}
+static void insertion(int *a, int n) {
+    for (int i = 1; i < n; i++) {
+        int key = a[i], j = i - 1;
+        while (j >= 0 && a[j] > key) { a[j + 1] = a[j]; j--; }
+        a[j + 1] = key;
+    }
+}
+int main(void) {
+    int a[] = {64, 34, 25, 12, 22, 11, 90, 5}, b[] = {64, 34, 25, 12, 22, 11, 90, 5};
+    bubble(a, 8); insertion(b, 8);
+    for (int i = 0; i < 8; i++) printf("%d/%d ", a[i], b[i]);
+    printf("\n");
+    return 0;
+}
+//// stdout
+5/5 11/11 12/12 22/22 25/25 34/34 64/64 90/90 
+//// case: quicksort_and_mergesort
+#include <stdio.h>
+static void quick(int *a, int lo, int hi) {
+    if (lo >= hi) return;
+    int p = a[(lo + hi) / 2], i = lo, j = hi;
+    while (i <= j) {
+        while (a[i] < p) i++;
+        while (a[j] > p) j--;
+        if (i <= j) { int t = a[i]; a[i] = a[j]; a[j] = t; i++; j--; }
+    }
+    quick(a, lo, j); quick(a, i, hi);
+}
+static void merge(int *a, int *tmp, int lo, int mid, int hi) {
+    int i = lo, j = mid, k = lo;
+    while (i < mid && j < hi) tmp[k++] = a[i] <= a[j] ? a[i++] : a[j++];
+    while (i < mid) tmp[k++] = a[i++];
+    while (j < hi) tmp[k++] = a[j++];
+    for (k = lo; k < hi; k++) a[k] = tmp[k];
+}
+static void msort(int *a, int *tmp, int lo, int hi) {
+    if (hi - lo < 2) return;
+    int mid = (lo + hi) / 2;
+    msort(a, tmp, lo, mid); msort(a, tmp, mid, hi);
+    merge(a, tmp, lo, mid, hi);
+}
+int main(void) {
+    int a[] = {9, 3, 7, 1, 8, 2, 6, 4, 5, 0, 15, 11, 13, 12, 14, 10};
+    int b[16], tmp[16];
+    for (int i = 0; i < 16; i++) b[i] = a[i];
+    quick(a, 0, 15);
+    msort(b, tmp, 0, 16);
+    for (int i = 0; i < 16; i++) printf("%d%c", a[i], b[i] == a[i] ? ' ' : '!');
+    printf("\n");
+    return 0;
+}
+//// stdout
+0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 
+//// case: n_queens
+#include <stdio.h>
+static int n, cols[16], count;
+static int ok(int r, int c) {
+    for (int i = 0; i < r; i++) {
+        int d = cols[i] - c;
+        if (d == 0 || d == r - i || d == i - r) return 0;
+    }
+    return 1;
+}
+static void place(int r) {
+    if (r == n) { count++; return; }
+    for (int c = 0; c < n; c++) if (ok(r, c)) { cols[r] = c; place(r + 1); }
+}
+int main(void) {
+    for (n = 4; n <= 8; n++) { count = 0; place(0); printf("%d queens: %d\n", n, count); }
+    return 0;
+}
+//// stdout
+4 queens: 2
+5 queens: 10
+6 queens: 4
+7 queens: 40
+8 queens: 92
+//// case: collatz_and_gcd_lcm
+#include <stdio.h>
+static int collatz(long n) { int steps = 0; while (n != 1) { n = n % 2 ? 3 * n + 1 : n / 2; steps++; } return steps; }
+static long gcd(long a, long b) { while (b) { long t = a % b; a = b; b = t; } return a; }
+int main(void) {
+    int best = 0, arg = 0;
+    for (int i = 1; i < 1000; i++) { int s = collatz(i); if (s > best) { best = s; arg = i; } }
+    printf("%d %d\n", arg, best);
+    printf("%ld %ld\n", gcd(1071, 462), 1071 / gcd(1071, 462) * 462);
+    return 0;
+}
+//// stdout
+871 178
+21 23562
+//// case: prime_factorization
+#include <stdio.h>
+int main(void) {
+    long ns[] = {360, 9973, 123456789, 1000000007L, 600851475143L};
+    for (int k = 0; k < 5; k++) {
+        long n = ns[k];
+        printf("%ld =", n);
+        for (long p = 2; p * p <= n; p++)
+            while (n % p == 0) { printf(" %ld", p); n /= p; }
+        if (n > 1) printf(" %ld", n);
+        printf("\n");
+    }
+    return 0;
+}
+//// stdout
+360 = 2 2 2 3 3 5
+9973 = 9973
+123456789 = 3 3 3607 3803
+1000000007 = 1000000007
+600851475143 = 71 839 1471 6857
+//// case: string_processing
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+static void reverse(char *s) { for (int i = 0, j = (int)strlen(s) - 1; i < j; i++, j--) { char t = s[i]; s[i] = s[j]; s[j] = t; } }
+static int is_palindrome(const char *s) {
+    int i = 0, j = (int)strlen(s) - 1;
+    while (i < j) {
+        while (i < j && !isalnum((unsigned char)s[i])) i++;
+        while (i < j && !isalnum((unsigned char)s[j])) j--;
+        if (tolower((unsigned char)s[i++]) != tolower((unsigned char)s[j--])) return 0;
+    }
+    return 1;
+}
+static int count_words(const char *s) {
+    int n = 0, in = 0;
+    for (; *s; s++) { if (isspace((unsigned char)*s)) in = 0; else if (!in) { in = 1; n++; } }
+    return n;
+}
+int main(void) {
+    char a[] = "stressed desserts";
+    reverse(a);
+    printf("%s\n", a);
+    printf("%d %d\n", is_palindrome("A man, a plan, a canal: Panama"), is_palindrome("not one"));
+    printf("%d\n", count_words("  the quick  brown fox jumps "));
+    return 0;
+}
+//// stdout
+stressed desserts
+1 0
+5
+//// case: caesar_and_rle
+#include <stdio.h>
+#include <string.h>
+static void caesar(char *s, int k) {
+    for (; *s; s++) {
+        if (*s >= 'a' && *s <= 'z') *s = 'a' + (*s - 'a' + k + 26) % 26;
+        else if (*s >= 'A' && *s <= 'Z') *s = 'A' + (*s - 'A' + k + 26) % 26;
+    }
+}
+static void rle(const char *s, char *out) {
+    while (*s) {
+        char c = *s; int n = 0;
+        while (*s == c) { s++; n++; }
+        out += sprintf(out, "%d%c", n, c);
+    }
+}
+int main(void) {
+    char m[] = "Hello, World!";
+    caesar(m, 3); printf("%s\n", m);
+    caesar(m, -3); printf("%s\n", m);
+    char out[64];
+    rle("aaabccddddde", out);
+    printf("%s\n", out);
+    return 0;
+}
+//// stdout
+Khoor, Zruog!
+Hello, World!
+3a1b2c5d1e
+//// case: base_conversion_and_bits
+#include <stdio.h>
+static void to_base(unsigned n, int base, char *buf) {
+    char tmp[40]; int i = 0;
+    if (n == 0) tmp[i++] = '0';
+    while (n) { int d = n % base; tmp[i++] = d < 10 ? '0' + d : 'a' + d - 10; n /= base; }
+    int j = 0;
+    while (i) buf[j++] = tmp[--i];
+    buf[j] = 0;
+}
+static int popcount(unsigned long x) { int c = 0; while (x) { x &= x - 1; c++; } return c; }
+int main(void) {
+    char buf[40];
+    unsigned vals[] = {0, 5, 255, 1000, 4294967295u};
+    for (int i = 0; i < 5; i++) {
+        to_base(vals[i], 2, buf); printf("%s ", buf);
+        to_base(vals[i], 16, buf); printf("%s ", buf);
+        to_base(vals[i], 36, buf); printf("%s\n", buf);
+    }
+    printf("%d %d %d\n", popcount(0), popcount(255), popcount(0xFFFFFFFFFFFFFFFFUL));
+    return 0;
+}
+//// stdout
+0 0 0
+101 5 5
+11111111 ff 73
+1111101000 3e8 rs
+11111111111111111111111111111111 ffffffff 1z141z3
+0 8 64
+//// case: hanoi_and_pascal
+#include <stdio.h>
+static int moves;
+static void hanoi(int n, char a, char b, char c) {
+    if (n == 0) return;
+    hanoi(n - 1, a, c, b);
+    moves++;
+    hanoi(n - 1, c, b, a);
+}
+int main(void) {
+    hanoi(10, 'A', 'B', 'C');
+    printf("%d\n", moves);
+    int t[10][10] = {{0}};
+    for (int i = 0; i < 10; i++) { t[i][0] = 1; for (int j = 1; j <= i; j++) t[i][j] = t[i - 1][j - 1] + (j < i ? t[i - 1][j] : 0); }
+    for (int i = 0; i < 7; i++) { for (int j = 0; j <= i; j++) printf("%d ", t[i][j]); printf("\n"); }
+    return 0;
+}
+//// stdout
+1023
+1 
+1 1 
+1 2 1 
+1 3 3 1 
+1 4 6 4 1 
+1 5 10 10 5 1 
+1 6 15 20 15 6 1 
+//// case: fizzbuzz
+#include <stdio.h>
+int main(void) {
+    for (int i = 1; i <= 20; i++) {
+        if (i % 15 == 0) printf("FizzBuzz\n");
+        else if (i % 5 == 0) printf("Buzz\n");
+        else if (i % 3 == 0) printf("Fizz\n");
+        else printf("%d\n", i);
+    }
+    return 0;
+}
+//// stdout
+1
+2
+Fizz
+4
+Buzz
+Fizz
+7
+8
+Fizz
+Buzz
+11
+Fizz
+13
+14
+FizzBuzz
+16
+17
+Fizz
+19
+Buzz
+//// case: hash_table_chaining
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#define BUCKETS 16
+struct entry { char *key; int value; struct entry *next; };
+static struct entry *table[BUCKETS];
+static unsigned hash(const char *s) { unsigned h = 5381; while (*s) h = h * 33 + (unsigned char)*s++; return h; }
+static void put(const char *k, int v) {
+    unsigned b = hash(k) % BUCKETS;
+    for (struct entry *e = table[b]; e; e = e->next) if (!strcmp(e->key, k)) { e->value = v; return; }
+    struct entry *e = malloc(sizeof *e);
+    e->key = strdup(k); e->value = v; e->next = table[b]; table[b] = e;
+}
+static int get(const char *k) {
+    for (struct entry *e = table[hash(k) % BUCKETS]; e; e = e->next) if (!strcmp(e->key, k)) return e->value;
+    return -1;
+}
+int main(void) {
+    const char *words[] = {"apple", "banana", "cherry", "date", "elderberry", "fig", "grape"};
+    for (int i = 0; i < 7; i++) put(words[i], i * i);
+    put("cherry", 99);
+    for (int i = 0; i < 7; i++) printf("%s=%d ", words[i], get(words[i]));
+    printf("%d\n", get("missing"));
+    return 0;
+}
+//// stdout
+apple=0 banana=1 cherry=99 date=9 elderberry=16 fig=25 grape=36 -1
+//// case: stack_machine
+#include <stdio.h>
+enum { PUSH, ADD, MUL, SUB, DUP, SWAP, PRINT, HALT };
+int main(void) {
+    int prog[] = {PUSH, 6, PUSH, 7, MUL, DUP, PRINT, PUSH, 2, SWAP, SUB, PRINT, HALT};
+    int stack[32], sp = 0, pc = 0;
+    for (;;) {
+        switch (prog[pc++]) {
+        case PUSH: stack[sp++] = prog[pc++]; break;
+        case ADD: sp--; stack[sp - 1] += stack[sp]; break;
+        case MUL: sp--; stack[sp - 1] *= stack[sp]; break;
+        case SUB: sp--; stack[sp - 1] -= stack[sp]; break;
+        case DUP: stack[sp] = stack[sp - 1]; sp++; break;
+        case SWAP: { int t = stack[sp - 1]; stack[sp - 1] = stack[sp - 2]; stack[sp - 2] = t; break; }
+        case PRINT: printf("%d\n", stack[sp - 1]); break;
+        case HALT: return 0;
+        }
+    }
+}
+//// stdout
+42
+-40
+//// case: expression_evaluator
+#include <stdio.h>
+#include <ctype.h>
+static const char *s;
+static long expr(void);
+static long factor(void) {
+    while (*s == ' ') s++;
+    if (*s == '(') { s++; long v = expr(); while (*s == ' ') s++; s++; return v; }
+    if (*s == '-') { s++; return -factor(); }
+    long v = 0;
+    while (isdigit((unsigned char)*s)) v = v * 10 + (*s++ - '0');
+    return v;
+}
+static long term(void) {
+    long v = factor();
+    for (;;) {
+        while (*s == ' ') s++;
+        if (*s == '*') { s++; v *= factor(); }
+        else if (*s == '/') { s++; v /= factor(); }
+        else if (*s == '%') { s++; v %= factor(); }
+        else return v;
+    }
+}
+static long expr(void) {
+    long v = term();
+    for (;;) {
+        while (*s == ' ') s++;
+        if (*s == '+') { s++; v += term(); }
+        else if (*s == '-') { s++; v -= term(); }
+        else return v;
+    }
+}
+int main(void) {
+    const char *tests[] = {"1 + 2 * 3", "(1 + 2) * 3", "100 / 7 % 5", "-(4 - 10) * 2", "2 * (3 + (4 - 1)) * 5"};
+    for (int i = 0; i < 5; i++) { s = tests[i]; printf("%s = %ld\n", tests[i], expr()); }
+    return 0;
+}
+//// stdout
+1 + 2 * 3 = 7
+(1 + 2) * 3 = 9
+100 / 7 % 5 = 4
+-(4 - 10) * 2 = 12
+2 * (3 + (4 - 1)) * 5 = 60
+//// case: game_of_life
+#include <stdio.h>
+#define W 8
+#define H 6
+static int g[H][W], n[H][W];
+static int neighbors(int y, int x) {
+    int c = 0;
+    for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
+        if (!dy && !dx) continue;
+        int yy = (y + dy + H) % H, xx = (x + dx + W) % W;
+        c += g[yy][xx];
+    }
+    return c;
+}
+int main(void) {
+    g[1][2] = g[2][3] = g[3][1] = g[3][2] = g[3][3] = 1;
+    for (int gen = 0; gen < 4; gen++) {
+        for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) { int c = neighbors(y, x); n[y][x] = g[y][x] ? (c == 2 || c == 3) : c == 3; }
+        for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) g[y][x] = n[y][x];
+    }
+    for (int y = 0; y < H; y++) { for (int x = 0; x < W; x++) putchar(g[y][x] ? '#' : '.'); putchar('\n'); }
+    return 0;
+}
+//// stdout
+........
+........
+...#....
+....#...
+..###...
+........
+//// case: mandelbrot_ascii
+#include <stdio.h>
+int main(void) {
+    for (int y = -6; y <= 6; y++) {
+        for (int x = -20; x <= 8; x++) {
+            double cr = x / 10.0, ci = y / 6.0, zr = 0, zi = 0;
+            int i;
+            for (i = 0; i < 30 && zr * zr + zi * zi < 4; i++) { double t = zr * zr - zi * zi + cr; zi = 2 * zr * zi + ci; zr = t; }
+            putchar(i == 30 ? '#' : i > 6 ? '+' : i > 2 ? '.' : ' ');
+        }
+        putchar('\n');
+    }
+    return 0;
+}
+//// stdout
+      ............++#....    
+    .............++##......  
+  ............+++#+#++++.....
+  ...........++#########+....
+ ......+++++++###########....
+ .....++################+....
+ ######################++....
+ .....++################+....
+ ......+++++++###########....
+  ...........++#########+....
+  ............+++#+#++++.....
+    .............++##......  
+      ............++#....    
+//// case: crc32_table
+#include <stdio.h>
+#include <string.h>
+static unsigned table[256];
+static void init(void) {
+    for (unsigned i = 0; i < 256; i++) {
+        unsigned c = i;
+        for (int k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320u ^ (c >> 1) : c >> 1;
+        table[i] = c;
+    }
+}
+static unsigned crc32(const unsigned char *p, size_t n) {
+    unsigned c = 0xFFFFFFFFu;
+    while (n--) c = table[(c ^ *p++) & 0xFF] ^ (c >> 8);
+    return c ^ 0xFFFFFFFFu;
+}
+int main(void) {
+    init();
+    const char *msgs[] = {"", "a", "123456789", "The quick brown fox jumps over the lazy dog"};
+    for (int i = 0; i < 4; i++) printf("%08x\n", crc32((const unsigned char *)msgs[i], strlen(msgs[i])));
+    return 0;
+}
+//// stdout
+00000000
+e8b7be43
+cbf43926
+414fa339
+//// case: lcg_and_hash64
+#include <stdio.h>
+static unsigned long state = 12345;
+static unsigned next(void) { state = state * 6364136223846793005UL + 1442695040888963407UL; return (unsigned)(state >> 33); }
+static unsigned long mix(unsigned long x) {
+    x ^= x >> 33; x *= 0xff51afd7ed558ccdUL; x ^= x >> 33; x *= 0xc4ceb9fe1a85ec53UL; x ^= x >> 33;
+    return x;
+}
+int main(void) {
+    for (int i = 0; i < 5; i++) printf("%u ", next() % 1000);
+    printf("\n%lx %lx\n", mix(1), mix(0xdeadbeefUL));
+    return 0;
+}
+//// stdout
+264 583 42 421 380 
+b456bcfc34c2cb2c d24bd59f862a1dac
+//// case: binary_search_and_bsearch_manual
+#include <stdio.h>
+static int bsearch_i(const int *a, int n, int key) {
+    int lo = 0, hi = n - 1;
+    while (lo <= hi) {
+        int mid = lo + (hi - lo) / 2;
+        if (a[mid] == key) return mid;
+        if (a[mid] < key) lo = mid + 1; else hi = mid - 1;
+    }
+    return -1;
+}
+int main(void) {
+    int a[] = {1, 3, 5, 7, 9, 11, 13, 15, 17, 19};
+    for (int k = 0; k <= 20; k += 4) printf("%d->%d ", k, bsearch_i(a, 10, k));
+    printf("\n");
+    return 0;
+}
+//// stdout
+0->-1 4->-1 8->-1 12->-1 16->-1 20->-1 
+//// case: many_live_integers_register_pressure
+#include <stdio.h>
+int main(void) {
+    int a = 1, b = 2, c = 3, d = 4, e = 5, f = 6, g = 7, h = 8, i = 9, j = 10;
+    int k = 11, l = 12, m = 13, n = 14, o = 15, p = 16, q = 17, r = 18, s = 19, t = 20;
+    int u = 21, v = 22, w = 23, x = 24, y = 25, z = 26;
+    for (int it = 0; it < 5; it++) {
+        a += b * c; b += c * d; c += d * e; d += e * f; e += f * g; f += g * h; g += h * i; h += i * j;
+        i += j * k; j += k * l; k += l * m; l += m * n; m += n * o; n += o * p; o += p * q; p += q * r;
+        q += r * s; r += s * t; s += t * u; t += u * v; u += v * w; v += w * x; w += x * y; x += y * z;
+        y += z * a; z += a * b;
+        a %= 1000; b %= 1000; c %= 1000; d %= 1000; e %= 1000; f %= 1000; g %= 1000; h %= 1000; i %= 1000;
+        j %= 1000; k %= 1000; l %= 1000; m %= 1000; n %= 1000; o %= 1000; p %= 1000; q %= 1000; r %= 1000;
+        s %= 1000; t %= 1000; u %= 1000; v %= 1000; w %= 1000; x %= 1000; y %= 1000; z %= 1000;
+    }
+    printf("%d %d %d %d %d\n", a, b, c, d, e);
+    printf("%d %d %d %d %d\n", f, g, h, i, j);
+    printf("%d %d %d %d %d\n", k, l, m, n, o);
+    printf("%d %d %d %d %d %d\n", p, q, r, s, t, u + v + w + x + y + z);
+    return 0;
+}
+//// stdout
+445 976 105 384 317
+600 921 520 309 752
+905 16 885 784 737
+360 501 650 487 414 1477
+//// case: many_live_doubles_register_pressure
+#include <stdio.h>
+int main(void) {
+    double a = 1, b = 2, c = 3, d = 4, e = 5, f = 6, g = 7, h = 8, i = 9, j = 10;
+    double k = 11, l = 12, m = 13, n = 14, o = 15, p = 16, q = 17, r = 18, s = 19, t = 20;
+    for (int it = 0; it < 4; it++) {
+        a = a * 0.5 + b; b = b * 0.5 + c; c = c * 0.5 + d; d = d * 0.5 + e; e = e * 0.5 + f;
+        f = f * 0.5 + g; g = g * 0.5 + h; h = h * 0.5 + i; i = i * 0.5 + j; j = j * 0.5 + k;
+        k = k * 0.5 + l; l = l * 0.5 + m; m = m * 0.5 + n; n = n * 0.5 + o; o = o * 0.5 + p;
+        p = p * 0.5 + q; q = q * 0.5 + r; r = r * 0.5 + s; s = s * 0.5 + t; t = t * 0.5 + a;
+    }
+    printf("%.3f %.3f %.3f %.3f %.3f\n", a, b, c, d, e);
+    printf("%.3f %.3f %.3f %.3f %.3f\n", f, g, h, i, j);
+    printf("%.3f %.3f %.3f %.3f %.3f\n", k, l, m, n, o);
+    printf("%.3f %.3f %.3f %.3f %.3f\n", p, q, r, s, t);
+    return 0;
+}
+//// stdout
+18.562 23.625 28.688 33.750 38.812
+43.875 48.938 54.000 59.062 64.125
+69.188 74.250 79.312 84.375 89.438
+94.500 81.062 49.625 28.438 26.500
+//// case: values_live_across_calls
+#include <stdio.h>
+static int id(int x) { return x; }
+static double idd(double x) { return x; }
+int main(void) {
+    int a = id(1), b = id(2), c = id(3), d = id(4), e = id(5), f = id(6), g = id(7), h = id(8);
+    double x = idd(1.5), y = idd(2.5), z = idd(3.5);
+    int s = a + b + c + d + e + f + g + h + id(100);
+    double t = x + y + z + idd(10.0);
+    printf("%d %.1f %d %d %d\n", s, t, a * h, b * g, c * f + d * e);
+    return 0;
+}
+//// stdout
+136 17.5 8 14 38
+//// case: deep_recursion_ackermann
+#include <stdio.h>
+static int ack(int m, int n) { return m == 0 ? n + 1 : n == 0 ? ack(m - 1, 1) : ack(m - 1, ack(m, n - 1)); }
+static long sum_to(long n) { return n == 0 ? 0 : n + sum_to(n - 1); }
+int main(void) {
+    printf("%d %d %d\n", ack(2, 3), ack(3, 3), ack(2, 0));
+    printf("%ld\n", sum_to(10000));
+    return 0;
+}
+//// stdout
+9 61 3
+50005000
+//// case: roman_numerals
+#include <stdio.h>
+static void roman(int n, char *out) {
+    static const int v[] = {1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1};
+    static const char *s[] = {"M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"};
+    *out = 0;
+    for (int i = 0; i < 13; i++) while (n >= v[i]) { for (const char *p = s[i]; *p; p++) *out++ = *p; *out = 0; n -= v[i]; }
+}
+int main(void) {
+    int tests[] = {1, 4, 9, 14, 40, 90, 400, 1994, 2024, 3999};
+    char buf[32];
+    for (int i = 0; i < 10; i++) { roman(tests[i], buf); printf("%d=%s ", tests[i], buf); }
+    printf("\n");
+    return 0;
+}
+//// stdout
+1=I 4=IV 9=IX 14=XIV 40=XL 90=XC 400=CD 1994=MCMXCIV 2024=MMXXIV 3999=MMMCMXCIX 
+//// case: big_number_addition
+#include <stdio.h>
+#include <string.h>
+int main(void) {
+    const char *a = "99999999999999999999999999", *b = "1";
+    int la = strlen(a), lb = strlen(b), n = la > lb ? la : lb;
+    char r[64]; int carry = 0, k = 0;
+    for (int i = 0; i < n; i++) {
+        int da = i < la ? a[la - 1 - i] - '0' : 0, db = i < lb ? b[lb - 1 - i] - '0' : 0;
+        int s = da + db + carry; r[k++] = '0' + s % 10; carry = s / 10;
+    }
+    if (carry) r[k++] = '1';
+    while (k) putchar(r[--k]);
+    putchar('\n');
+    return 0;
+}
+//// stdout
+100000000000000000000000000
+//// case: vector_math_with_structs
+#include <stdio.h>
+#include <math.h>
+typedef struct { double x, y, z; } vec3;
+static vec3 add(vec3 a, vec3 b) { return (vec3){a.x + b.x, a.y + b.y, a.z + b.z}; }
+static vec3 scale(vec3 a, double k) { return (vec3){a.x * k, a.y * k, a.z * k}; }
+static double dot(vec3 a, vec3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+static vec3 cross(vec3 a, vec3 b) { return (vec3){a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x}; }
+int main(void) {
+    vec3 a = {1, 2, 3}, b = {4, 5, 6};
+    vec3 c = cross(a, b);
+    printf("%.1f %.1f %.1f %.1f\n", c.x, c.y, c.z, dot(a, b));
+    vec3 d = add(scale(a, 2), b);
+    printf("%.1f %.1f %.1f %.4f\n", d.x, d.y, d.z, sqrt(dot(d, d)));
+    return 0;
+}
+//// stdout
+-3.0 6.0 -3.0 32.0
+6.0 9.0 12.0 16.1555
+//// case: dynamic_array_and_strings
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+struct vec { int *data; int len, cap; };
+static void push(struct vec *v, int x) {
+    if (v->len == v->cap) { v->cap = v->cap ? v->cap * 2 : 2; v->data = realloc(v->data, v->cap * sizeof(int)); }
+    v->data[v->len++] = x;
+}
+int main(void) {
+    struct vec v = {0};
+    for (int i = 0; i < 20; i++) push(&v, i * 3);
+    long s = 0;
+    for (int i = 0; i < v.len; i++) s += v.data[i];
+    printf("%d %d %ld\n", v.len, v.cap, s);
+    free(v.data);
+    char **lines = malloc(3 * sizeof *lines);
+    const char *src[] = {"alpha", "beta", "gamma"};
+    for (int i = 0; i < 3; i++) lines[i] = strdup(src[i]);
+    for (int i = 2; i >= 0; i--) printf("%s ", lines[i]);
+    printf("\n");
+    for (int i = 0; i < 3; i++) free(lines[i]);
+    free(lines);
+    return 0;
+}
+//// stdout
+20 32 570
+gamma beta alpha 

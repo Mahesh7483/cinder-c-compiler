@@ -1,0 +1,411 @@
+//// case: struct_basic
+#include <stdio.h>
+struct point { int x, y; };
+int main(void) {
+    struct point p = {3, 4};
+    struct point q;
+    q.x = 10; q.y = 20;
+    printf("%d %d %d %d\n", p.x, p.y, q.x, q.y);
+    struct point *pp = &p;
+    pp->x += 100;
+    (*pp).y *= 2;
+    printf("%d %d\n", p.x, p.y);
+    printf("%zu\n", sizeof(struct point));
+    return 0;
+}
+//// stdout
+3 4 10 20
+103 8
+8
+//// case: struct_assignment_and_copy
+#include <stdio.h>
+struct rec { int id; double score; char name[12]; };
+int main(void) {
+    struct rec a = {7, 9.5, "alice"};
+    struct rec b = a;
+    b.id = 8; b.name[0] = 'A';
+    struct rec c;
+    c = b;
+    printf("%d %.1f %s | %d %.1f %s | %d %s\n", a.id, a.score, a.name, b.id, b.score, b.name, c.id, c.name);
+    return 0;
+}
+//// stdout
+7 9.5 alice | 8 9.5 Alice | 8 Alice
+//// case: struct_pass_by_value_small
+#include <stdio.h>
+struct p2 { int x, y; };
+static int sum(struct p2 p) { return p.x + p.y; }
+static struct p2 mk(int a, int b) { struct p2 r = {a, b}; return r; }
+static struct p2 swap(struct p2 p) { struct p2 r = {p.y, p.x}; return r; }
+int main(void) {
+    struct p2 a = mk(3, 4);
+    printf("%d\n", sum(a));
+    struct p2 b = swap(a);
+    printf("%d %d\n", b.x, b.y);
+    printf("%d\n", sum(swap(mk(10, 1))));
+    a.x = 99;
+    printf("%d %d\n", sum(b), a.x);
+    return 0;
+}
+//// stdout
+7
+4 3
+11
+7 99
+//// case: struct_pass_by_value_16_bytes
+#include <stdio.h>
+struct two { long a, b; };
+static long total(struct two t) { return t.a * 10 + t.b; }
+static struct two make(long a, long b) { struct two t = {a, b}; return t; }
+int main(void) {
+    struct two t = make(5, 7);
+    printf("%ld %ld %ld\n", t.a, t.b, total(t));
+    struct two u = make(t.b, t.a);
+    printf("%ld\n", total(u));
+    return 0;
+}
+//// stdout
+5 7 57
+75
+//// case: struct_pass_large_by_value
+#include <stdio.h>
+struct big { long a, b, c, d; };
+static long sum(struct big v) { return v.a + v.b + v.c + v.d; }
+static struct big make(long s) { struct big v = {s, s + 1, s + 2, s + 3}; return v; }
+static struct big add(struct big x, struct big y) {
+    struct big r = {x.a + y.a, x.b + y.b, x.c + y.c, x.d + y.d};
+    return r;
+}
+int main(void) {
+    struct big a = make(10), b = make(100);
+    printf("%ld %ld\n", sum(a), sum(b));
+    struct big c = add(a, b);
+    printf("%ld %ld %ld %ld\n", c.a, c.b, c.c, c.d);
+    a.a = 0;
+    printf("%ld %ld\n", sum(a), sum(make(1)));
+    return 0;
+}
+//// stdout
+46 406
+110 112 114 116
+36 10
+//// case: struct_with_doubles_in_registers
+#include <stdio.h>
+struct vec { double x, y; };
+static struct vec add(struct vec a, struct vec b) { struct vec r = {a.x + b.x, a.y + b.y}; return r; }
+static double dot(struct vec a, struct vec b) { return a.x * b.x + a.y * b.y; }
+static struct vec scale(struct vec v, double k) { struct vec r = {v.x * k, v.y * k}; return r; }
+int main(void) {
+    struct vec a = {1.5, 2.5}, b = {4.0, -1.0};
+    struct vec c = add(a, b);
+    printf("%.2f %.2f %.2f\n", c.x, c.y, dot(a, b));
+    struct vec d = scale(c, 2.0);
+    printf("%.2f %.2f\n", d.x, d.y);
+    return 0;
+}
+//// stdout
+5.50 1.50 3.50
+11.00 3.00
+//// case: struct_mixed_int_and_float
+#include <stdio.h>
+struct mix { double d; long l; };
+struct mix2 { long l; double d; };
+struct fl { float a, b; };
+static double f1(struct mix m) { return m.d + m.l; }
+static double f2(struct mix2 m) { return m.d * m.l; }
+static struct mix g1(void) { struct mix m = {1.25, 8}; return m; }
+static struct fl h(struct fl v) { struct fl r = {v.b, v.a}; return r; }
+int main(void) {
+    struct mix m = {2.5, 4};
+    struct mix2 m2 = {3, 0.5};
+    printf("%.2f %.2f\n", f1(m), f2(m2));
+    struct mix r = g1();
+    printf("%.2f %ld\n", r.d, r.l);
+    struct fl v = {1.0f, 2.0f};
+    struct fl w = h(v);
+    printf("%.1f %.1f\n", w.a, w.b);
+    return 0;
+}
+//// stdout
+6.50 1.50
+1.25 8
+2.0 1.0
+//// case: struct_odd_sizes
+#include <stdio.h>
+struct s3 { char a, b, c; };
+struct s5 { char a[5]; };
+struct s12 { int a, b, c; };
+static int sum3(struct s3 s) { return s.a + s.b + s.c; }
+static int sum5(struct s5 s) { int t = 0; for (int i = 0; i < 5; i++) t += s.a[i]; return t; }
+static int sum12(struct s12 s) { return s.a * 100 + s.b * 10 + s.c; }
+static struct s3 mk3(void) { struct s3 s = {1, 2, 3}; return s; }
+static struct s12 mk12(void) { struct s12 s = {4, 5, 6}; return s; }
+int main(void) {
+    struct s3 a = {10, 20, 30};
+    struct s5 b = {{1, 2, 3, 4, 5}};
+    struct s12 c = {1, 2, 3};
+    printf("%d %d %d\n", sum3(a), sum5(b), sum12(c));
+    printf("%d %d\n", sum3(mk3()), sum12(mk12()));
+    return 0;
+}
+//// stdout
+60 15 123
+6 456
+//// case: many_struct_arguments
+#include <stdio.h>
+struct p { long a, b; };
+static long f(struct p a, struct p b, struct p c, struct p d) { return a.a + a.b + b.a + b.b + c.a + c.b + d.a + d.b; }
+static long g(long x1, long x2, long x3, long x4, long x5, struct p s, long y) { return x1 + x2 + x3 + x4 + x5 + s.a * 100 + s.b * 1000 + y; }
+int main(void) {
+    struct p a = {1, 2}, b = {3, 4}, c = {5, 6}, d = {7, 8};
+    printf("%ld\n", f(a, b, c, d));
+    printf("%ld\n", g(1, 2, 3, 4, 5, a, 6));
+    return 0;
+}
+//// stdout
+36
+2121
+//// case: nested_structs_and_arrays
+#include <stdio.h>
+struct inner { int v[3]; char tag; };
+struct outer { struct inner in[2]; int count; struct inner single; };
+int main(void) {
+    struct outer o = {{{{1, 2, 3}, 'a'}, {{4, 5, 6}, 'b'}}, 2, {{7, 8, 9}, 'c'}};
+    int sum = 0;
+    for (int i = 0; i < o.count; i++) for (int j = 0; j < 3; j++) sum += o.in[i].v[j];
+    printf("%d %c %c %d\n", sum, o.in[1].tag, o.single.tag, o.single.v[2]);
+    o.in[0].v[1] = 50;
+    struct inner copy = o.in[0];
+    copy.v[0] = 9;
+    printf("%d %d %zu\n", o.in[0].v[1], copy.v[0], sizeof(struct outer));
+    return 0;
+}
+//// stdout
+21 b c 9
+50 9 52
+//// case: array_of_structs
+#include <stdio.h>
+struct item { const char *name; int qty; double price; };
+int main(void) {
+    struct item inv[] = {{"pen", 10, 1.5}, {"book", 3, 12.25}, {"bag", 1, 30.0}};
+    double total = 0;
+    for (int i = 0; i < 3; i++) {
+        printf("%s x%d @ %.2f\n", inv[i].name, inv[i].qty, inv[i].price);
+        total += inv[i].qty * inv[i].price;
+    }
+    printf("%.2f %zu\n", total, sizeof inv / sizeof inv[0]);
+    struct item *p = inv + 1;
+    printf("%s %s\n", p->name, (p + 1)->name);
+    return 0;
+}
+//// stdout
+pen x10 @ 1.50
+book x3 @ 12.25
+bag x1 @ 30.00
+81.75 3
+book bag
+//// case: linked_list
+#include <stdio.h>
+#include <stdlib.h>
+struct node { int v; struct node *next; };
+static struct node *push(struct node *h, int v) { struct node *n = malloc(sizeof *n); n->v = v; n->next = h; return n; }
+static struct node *reverse(struct node *h) {
+    struct node *prev = NULL;
+    while (h) { struct node *nx = h->next; h->next = prev; prev = h; h = nx; }
+    return prev;
+}
+int main(void) {
+    struct node *l = NULL;
+    for (int i = 1; i <= 6; i++) l = push(l, i * i);
+    for (struct node *p = l; p; p = p->next) printf("%d ", p->v);
+    printf("\n");
+    l = reverse(l);
+    for (struct node *p = l; p; p = p->next) printf("%d ", p->v);
+    printf("\n");
+    while (l) { struct node *n = l->next; free(l); l = n; }
+    return 0;
+}
+//// stdout
+36 25 16 9 4 1 
+1 4 9 16 25 36 
+//// case: unions
+#include <stdio.h>
+union u { int i; float f; unsigned char b[4]; };
+int main(void) {
+    union u x;
+    x.i = 0x3F800000;
+    printf("%.1f %d\n", x.f, x.b[3]);
+    x.f = -2.0f;
+    printf("%x %zu\n", x.i, sizeof x);
+    union { long l; double d; } y;
+    y.d = 1.0;
+    printf("%lx\n", y.l);
+    return 0;
+}
+//// stdout
+1.0 63
+c0000000 4
+3ff0000000000000
+//// case: bitfields
+#include <stdio.h>
+struct flags { unsigned a : 3; unsigned b : 5; unsigned c : 1; int d : 4; unsigned e : 12; };
+int main(void) {
+    struct flags f = {0};
+    f.a = 5; f.b = 17; f.c = 1; f.d = -3; f.e = 4000;
+    printf("%u %u %u %d %u\n", f.a, f.b, f.c, f.d, f.e);
+    f.a += 4;
+    f.b++;
+    f.d--;
+    printf("%u %u %d\n", f.a, f.b, f.d);
+    f.e = 5000;
+    printf("%u %zu\n", f.e, sizeof f);
+    struct flags g = {1, 2, 0, 3, 4};
+    printf("%u %u %u %d %u\n", g.a, g.b, g.c, g.d, g.e);
+    return 0;
+}
+//// stdout
+5 17 1 -3 4000
+1 18 -4
+904 4
+1 2 0 3 4
+//// case: bitfield_layout_and_pointer
+#include <stdio.h>
+struct s { char c; unsigned x : 4; unsigned y : 4; int z; };
+struct t { unsigned a : 20; unsigned b : 20; };
+int main(void) {
+    struct s v = {'q', 9, 6, -1};
+    struct s *p = &v;
+    p->x = 15; p->y = 1;
+    printf("%c %u %u %d %zu\n", v.c, v.x, v.y, v.z, sizeof v);
+    struct t w = {0xFFFFF, 0x12345};
+    printf("%x %x %zu\n", w.a, w.b, sizeof w);
+    return 0;
+}
+//// stdout
+q 15 1 -1 8
+fffff 12345 8
+//// case: typedef_struct_and_designated_init
+#include <stdio.h>
+typedef struct { int a, b, c; } triple;
+typedef struct node { int v; struct node *next; } node;
+int main(void) {
+    triple t = {.c = 3, .a = 1};
+    triple u = {.b = 7};
+    printf("%d %d %d | %d %d %d\n", t.a, t.b, t.c, u.a, u.b, u.c);
+    node n2 = {2, 0}, n1 = {1, &n2};
+    printf("%d %d\n", n1.v, n1.next->v);
+    int arr[6] = {[1] = 10, [4] = 40, 50};
+    for (int i = 0; i < 6; i++) printf("%d ", arr[i]);
+    printf("\n");
+    return 0;
+}
+//// stdout
+1 0 3 | 0 7 0
+1 2
+0 10 0 0 40 50 
+//// case: struct_pointer_members_and_function_pointers
+#include <stdio.h>
+struct ops { int (*apply)(int, int); const char *name; };
+static int add(int a, int b) { return a + b; }
+static int mul(int a, int b) { return a * b; }
+int main(void) {
+    struct ops table[] = {{add, "add"}, {mul, "mul"}};
+    for (int i = 0; i < 2; i++) printf("%s: %d\n", table[i].name, table[i].apply(6, 7));
+    struct ops *p = &table[1];
+    printf("%d\n", p->apply(2, 3));
+    return 0;
+}
+//// stdout
+add: 13
+mul: 42
+6
+//// case: struct_return_through_pointer_chain
+#include <stdio.h>
+struct pair { int a; int b; };
+struct wrap { struct pair p; long extra; };
+static struct wrap make(int a, int b) { struct wrap w = {{a, b}, a + b}; return w; }
+static struct pair get(struct wrap w) { return w.p; }
+int main(void) {
+    struct wrap w = make(3, 4);
+    struct pair p = get(w);
+    printf("%d %d %ld\n", p.a, p.b, w.extra);
+    printf("%d\n", make(10, 20).p.b + get(make(1, 2)).a);
+    return 0;
+}
+//// stdout
+3 4 7
+21
+//// case: anonymous_struct_union_members
+#include <stdio.h>
+struct v { int kind; union { int i; double d; }; struct { int x, y; }; };
+int main(void) {
+    struct v a;
+    a.kind = 1; a.i = 42; a.x = 3; a.y = 4;
+    printf("%d %d %d %d\n", a.kind, a.i, a.x, a.y);
+    a.d = 2.5;
+    printf("%.1f %zu\n", a.d, sizeof a);
+    return 0;
+}
+//// stdout
+1 42 3 4
+2.5 24
+//// case: pragma_pack_and_alignment
+#include <stdio.h>
+#include <stddef.h>
+#pragma pack(push, 1)
+struct packed { char c; int i; short s; };
+#pragma pack(pop)
+struct normal { char c; int i; short s; };
+struct aligned { _Alignas(16) char c; };
+int main(void) {
+    printf("%zu %zu\n", sizeof(struct packed), sizeof(struct normal));
+    printf("%zu %zu\n", offsetof(struct packed, i), offsetof(struct normal, i));
+    printf("%zu %zu\n", sizeof(struct aligned), _Alignof(struct aligned));
+    struct packed p = {'x', 123456, 7};
+    printf("%c %d %d\n", p.c, p.i, p.s);
+    return 0;
+}
+//// stdout
+7 12
+1 4
+16 16
+x 123456 7
+//// case: compound_literals
+#include <stdio.h>
+struct pt { int x, y; };
+static int sum(struct pt p) { return p.x + p.y; }
+static int sum_arr(const int *a, int n) { int t = 0; for (int i = 0; i < n; i++) t += a[i]; return t; }
+int main(void) {
+    printf("%d\n", sum((struct pt){3, 4}));
+    printf("%d\n", sum_arr((int[]){1, 2, 3, 4, 5}, 5));
+    struct pt *p = &(struct pt){7, 8};
+    p->x++;
+    printf("%d %d\n", p->x, p->y);
+    return 0;
+}
+//// stdout
+7
+15
+8 8
+//// case: struct_in_global_data
+#include <stdio.h>
+struct entry { const char *key; int value; };
+static const struct entry table[] = {{"one", 1}, {"two", 2}, {"three", 3}};
+struct entry gtable[2] = {{"a", 10}, {"b", 20}};
+static int lookup(const char *k) {
+    for (unsigned i = 0; i < sizeof table / sizeof table[0]; i++) {
+        const char *a = table[i].key, *b = k;
+        while (*a && *a == *b) { a++; b++; }
+        if (*a == *b) return table[i].value;
+    }
+    return -1;
+}
+int main(void) {
+    printf("%d %d %d %d\n", lookup("one"), lookup("three"), lookup("four"), gtable[1].value);
+    gtable[0].value += 5;
+    printf("%d %s\n", gtable[0].value, gtable[1].key);
+    return 0;
+}
+//// stdout
+1 3 -1 20
+15 b

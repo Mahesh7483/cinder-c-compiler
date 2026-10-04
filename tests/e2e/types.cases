@@ -1,0 +1,349 @@
+//// case: double_arithmetic
+#include <stdio.h>
+int main(void) {
+    double a = 7.5, b = 2.0;
+    printf("%.2f %.2f %.2f %.2f\n", a + b, a - b, a * b, a / b);
+    printf("%.3f\n", (a + b) * (a - b) / 3.0);
+    double c = -a;
+    printf("%.1f %.1f\n", c, -c);
+    return 0;
+}
+//// stdout
+9.50 5.50 15.00 3.75
+17.417
+-7.5 7.5
+//// case: float_arithmetic
+#include <stdio.h>
+int main(void) {
+    float a = 1.5f, b = 0.25f;
+    printf("%.4f %.4f %.4f %.4f\n", a + b, a - b, a * b, a / b);
+    float s = 0;
+    for (int i = 1; i <= 10; i++) s += 1.0f / i;
+    printf("%.5f\n", s);
+    return 0;
+}
+//// stdout
+1.7500 1.2500 0.3750 6.0000
+2.92897
+//// case: int_float_conversions
+#include <stdio.h>
+int main(void) {
+    int i = 7;
+    double d = i;
+    float f = i;
+    printf("%.1f %.1f\n", d, f);
+    d = 9.99; f = -3.7f;
+    printf("%d %d %d %d\n", (int)d, (int)f, (int)(d * 100), (int)-d);
+    long big = 3000000000L;
+    printf("%.1f\n", (double)big);
+    printf("%ld\n", (long)1e15);
+    return 0;
+}
+//// stdout
+7.0 7.0
+9 -3 999 -9
+3000000000.0
+1000000000000000
+//// case: unsigned_float_conversions
+#include <stdio.h>
+int main(void) {
+    unsigned u = 4000000000u;
+    printf("%.1f\n", (double)u);
+    unsigned long ul = 18446744073709551615UL;
+    printf("%.1f\n", (double)ul);
+    unsigned long half = 9223372036854775808UL;
+    printf("%.1f %lu\n", (double)half, (unsigned long)(double)half);
+    double d = 3000000000.0;
+    printf("%u %lu\n", (unsigned)d, (unsigned long)d);
+    double e = 1.8e19;
+    printf("%lu\n", (unsigned long)e);
+    return 0;
+}
+//// stdout
+4000000000.0
+18446744073709551616.0
+9223372036854775808.0 9223372036854775808
+3000000000 3000000000
+18000000000000000000
+//// case: float_double_conversions
+#include <stdio.h>
+int main(void) {
+    float f = 0.1f;
+    double d = f;
+    printf("%.10f\n", d);
+    double e = 1.0 / 3.0;
+    float g = (float)e;
+    printf("%.10f %.10f\n", e, g);
+    printf("%.1f\n", (double)(float)16777217.0);
+    return 0;
+}
+//// stdout
+0.1000000015
+0.3333333333 0.3333333433
+16777216.0
+//// case: float_comparisons
+#include <stdio.h>
+int main(void) {
+    double a = 1.5, b = 2.5, nan = 0.0 / 0.0 * 0 + (a - a) / (a - a);
+    printf("%d %d %d %d %d %d\n", a < b, a <= b, a > b, a >= b, a == b, a != b);
+    printf("%d %d %d %d %d %d\n", nan < b, nan <= b, nan > b, nan >= b, nan == nan, nan != nan);
+    printf("%d %d\n", a == a, !(a != a));
+    float x = 3.0f, y = 3.0f;
+    printf("%d %d\n", x == y, x < y);
+    if (a < b) printf("lt\n"); else printf("ge\n");
+    if (nan == nan) printf("eq\n"); else printf("ne\n");
+    if (nan != nan) printf("ne2\n");
+    return 0;
+}
+//// stdout
+1 1 0 0 0 1
+0 0 0 0 0 1
+1 1
+1 0
+lt
+ne
+ne2
+//// case: float_in_conditions
+#include <stdio.h>
+int main(void) {
+    double zero = 0.0, one = 1.0;
+    if (zero) printf("zero true\n"); else printf("zero false\n");
+    if (one) printf("one true\n");
+    while (one > 0.3) { one -= 0.25; printf("%.2f ", one); }
+    printf("\n");
+    printf("%d %d\n", !zero, !one);
+    printf("%d\n", zero || one);
+    return 0;
+}
+//// stdout
+zero false
+one true
+0.75 0.50 0.25 
+1 0
+1
+//// case: math_library
+#include <stdio.h>
+#include <math.h>
+int main(void) {
+    printf("%.4f %.4f %.4f\n", sqrt(2.0), pow(2.0, 10.0), exp(1.0));
+    printf("%.4f %.4f %.4f\n", sin(0.5), cos(0.5), atan2(1.0, 1.0));
+    printf("%.1f %.1f %.1f %.1f\n", floor(-2.5), ceil(-2.5), fabs(-3.25), fmod(10.0, 3.0));
+    printf("%.4f %.4f\n", log(10.0), log10(1000.0));
+    printf("%.4f\n", sqrtf(9.0f) + powf(2.0f, 3.0f));
+    return 0;
+}
+//// stdout
+1.4142 1024.0000 2.7183
+0.4794 0.8776 0.7854
+-3.0 -2.0 3.2 1.0
+2.3026 3.0000
+11.0000
+//// case: bool_type
+#include <stdio.h>
+#include <stdbool.h>
+int main(void) {
+    bool t = true, f = false;
+    bool c = 5;
+    bool d = 0.5;
+    int *p = 0;
+    bool e = p;
+    printf("%d %d %d %d %d\n", t, f, c, d, e);
+    printf("%zu %d\n", sizeof(bool), (int)(t + t));
+    bool g = t && !f;
+    printf("%d\n", g);
+    return 0;
+}
+//// stdout
+1 0 1 1 0
+1 2
+1
+//// case: enums
+#include <stdio.h>
+enum Color { RED, GREEN = 5, BLUE };
+enum { A = 1 << 3, B = A | 2, C = B + 1 };
+int main(void) {
+    enum Color c = BLUE;
+    printf("%d %d %d\n", RED, GREEN, c);
+    printf("%d %d %d\n", A, B, C);
+    c = RED;
+    switch (c) { case RED: printf("red\n"); break; case GREEN: printf("green\n"); break; default: printf("other\n"); }
+    printf("%zu\n", sizeof(enum Color));
+    return 0;
+}
+//// stdout
+0 5 6
+8 10 11
+red
+4
+//// case: sizeof_types
+#include <stdio.h>
+#include <stddef.h>
+struct S { char c; int i; double d; };
+union U { int i; double d; char b[10]; };
+int main(void) {
+    printf("%zu %zu %zu %zu %zu %zu\n", sizeof(char), sizeof(short), sizeof(int), sizeof(long), sizeof(long long), sizeof(void *));
+    printf("%zu %zu %zu %zu\n", sizeof(float), sizeof(double), sizeof(struct S), sizeof(union U));
+    int a[7];
+    printf("%zu %zu\n", sizeof a, sizeof(a) / sizeof(a[0]));
+    printf("%zu %zu %zu\n", offsetof(struct S, c), offsetof(struct S, i), offsetof(struct S, d));
+    printf("%zu\n", sizeof(size_t));
+    return 0;
+}
+//// stdout
+1 2 4 8 8 8
+4 8 16 16
+28 7
+0 4 8
+8
+//// case: integer_promotion
+#include <stdio.h>
+int main(void) {
+    unsigned char a = 200, b = 100;
+    printf("%d %d\n", a + b, a * b);
+    char c = -1;
+    unsigned char d = c;
+    printf("%d %d %u\n", c, d, (unsigned)c);
+    short s = 30000;
+    printf("%d %d\n", s + s, (short)(s + s));
+    unsigned short us = 65535;
+    printf("%d\n", us + 1);
+    printf("%d %d\n", (char)300, (unsigned char)300);
+    return 0;
+}
+//// stdout
+300 20000
+-1 255 4294967295
+60000 -5536
+65536
+44 44
+//// case: signed_unsigned_comparison
+#include <stdio.h>
+int main(void) {
+    int a = -1;
+    unsigned b = 1;
+    printf("%d\n", a < b);
+    printf("%d\n", a < (int)b);
+    long c = -1;
+    unsigned long d = 1;
+    printf("%d\n", c < d);
+    printf("%d\n", -1 < 0u);
+    printf("%d\n", (char)-1 < (unsigned char)1);
+    return 0;
+}
+//// stdout
+0
+1
+0
+0
+1
+//// case: unsigned_wraparound
+#include <stdio.h>
+#include <limits.h>
+int main(void) {
+    unsigned a = UINT_MAX;
+    a++;
+    printf("%u\n", a);
+    unsigned long b = 0;
+    b--;
+    printf("%lu\n", b);
+    unsigned char c = 255;
+    c++;
+    printf("%d\n", c);
+    unsigned short d = 0;
+    d--;
+    printf("%d\n", d);
+    printf("%d %d\n", INT_MAX, INT_MIN);
+    printf("%ld %ld\n", LONG_MAX, LONG_MIN);
+    return 0;
+}
+//// stdout
+0
+18446744073709551615
+0
+65535
+2147483647 -2147483648
+9223372036854775807 -9223372036854775808
+//// case: shifts_and_bitwise_long
+#include <stdio.h>
+int main(void) {
+    unsigned long x = 1;
+    printf("%lu\n", x << 40);
+    long y = -1024;
+    printf("%ld %ld\n", y >> 3, y << 2);
+    unsigned u = 0x80000000u;
+    printf("%u %u\n", u >> 31, u >> 4);
+    int s = -16;
+    printf("%d %d\n", s >> 2, s << 1);
+    unsigned long m = 0xF0F0F0F0F0F0F0F0UL;
+    printf("%lx %lx %lx\n", m & 0xFF00FF00FF00FF00UL, m | 0x0F, m ^ ~0UL);
+    int k = 5, sh = 3;
+    printf("%d %d\n", k << sh, 1000 >> sh);
+    return 0;
+}
+//// stdout
+1099511627776
+-128 -4096
+1 134217728
+-4 -32
+f000f000f000f000 f0f0f0f0f0f0f0ff f0f0f0f0f0f0f0f
+40 125
+//// case: hex_octal_binary_literals
+#include <stdio.h>
+int main(void) {
+    printf("%d %d %d %d\n", 0x1F, 017, 0b101, 0XaB);
+    printf("%lu %u\n", 0xFFFFFFFFFFUL, 0xFFFFFFFFu);
+    printf("%d %c %c %d\n", 'A', 65, '\x41', '\0');
+    printf("%d %d\n", '\n', '\t');
+    return 0;
+}
+//// stdout
+31 15 5 171
+1099511627775 4294967295
+65 A A 0
+10 9
+//// case: integer_overflow_signed_via_unsigned
+#include <stdio.h>
+int main(void) {
+    unsigned a = 2147483647u;
+    int b = (int)(a + 1u);
+    printf("%d\n", b);
+    long c = (long)9223372036854775807UL;
+    printf("%ld\n", c);
+    int d = (int)3000000000u;
+    printf("%d\n", d);
+    return 0;
+}
+//// stdout
+-2147483648
+9223372036854775807
+-1294967296
+//// case: const_expression_folding
+#include <stdio.h>
+#define N (3 * 4 + 2)
+int arr[N];
+int main(void) {
+    printf("%zu %d %d\n", sizeof arr / sizeof arr[0], 100 / 7, 100 % 7);
+    printf("%d %d\n", (1 << 10) - 1, ~0 >> 28);
+    printf("%d\n", sizeof(int) * 3 > 10 ? 1 : 0);
+    printf("%.2f\n", 1.0 / 3 * 3);
+    return 0;
+}
+//// stdout
+14 14 2
+1023 -1
+1
+1.00
+//// case: long_double_free_float_formats
+#include <stdio.h>
+int main(void) {
+    double d = 1234.5678;
+    printf("%f|%.0f|%.3f|%10.2f|%-10.1f|%e\n", d, d, d, d, d, d);
+    printf("%g %g %g\n", 0.0001, 100000.0, 1e-10);
+    float f = 2.5f;
+    printf("%f %g\n", f, f);
+    return 0;
+}
+//// stdout
+1234.567800|1235|1234.568|   1234.57|1234.6    |1.234568e+03
+0.0001 100000 1e-10
+2.500000 2.5

@@ -1,0 +1,474 @@
+//// case: return_constant
+int main(void) { return 42; }
+//// exit: 42
+//// stdout
+//// case: hello_world
+#include <stdio.h>
+int main(void) { printf("Hello, World!\n"); return 0; }
+//// stdout
+Hello, World!
+//// case: integer_arithmetic
+#include <stdio.h>
+int main(void) {
+    int a = 17, b = 5;
+    printf("%d %d %d %d %d\n", a + b, a - b, a * b, a / b, a % b);
+    printf("%d %d %d\n", -a, ~a, !a);
+    printf("%d %d %d %d %d\n", a & b, a | b, a ^ b, a << 2, a >> 1);
+    return 0;
+}
+//// stdout
+22 12 85 3 2
+-17 -18 0
+1 21 20 68 8
+//// case: negative_division_and_remainder
+#include <stdio.h>
+int main(void) {
+    printf("%d %d\n", -17 / 5, -17 % 5);
+    printf("%d %d\n", 17 / -5, 17 % -5);
+    printf("%d %d\n", -17 / -5, -17 % -5);
+    return 0;
+}
+//// stdout
+-3 -2
+-3 2
+3 -2
+//// case: unsigned_arithmetic
+#include <stdio.h>
+int main(void) {
+    unsigned a = 4000000000u, b = 3;
+    printf("%u %u %u\n", a + b, a / b, a % b);
+    printf("%u\n", a * 2);
+    unsigned c = 0;
+    c--;
+    printf("%u %d\n", c, c > 5);
+    return 0;
+}
+//// stdout
+4000000003 1333333333 1
+3705032704
+4294967295 1
+//// case: long_arithmetic
+#include <stdio.h>
+int main(void) {
+    long a = 9000000000L, b = 7;
+    printf("%ld %ld %ld %ld\n", a + b, a * b, a / b, a % b);
+    long long c = -1234567890123LL;
+    printf("%lld %lld\n", c, c / 1000);
+    unsigned long d = 18446744073709551615UL;
+    printf("%lu %lu\n", d, d / 3);
+    return 0;
+}
+//// stdout
+9000000007 63000000000 1285714285 5
+-1234567890123 -1234567890
+18446744073709551615 6148914691236517205
+//// case: operator_precedence
+#include <stdio.h>
+int main(void) {
+    printf("%d\n", 2 + 3 * 4 - 6 / 2);
+    printf("%d\n", (2 + 3) * (4 - 6) / 2);
+    printf("%d\n", 1 << 2 + 1);
+    printf("%d\n", 5 & 3 == 3);
+    printf("%d\n", 10 - 4 - 3);
+    printf("%d\n", 100 / 10 / 5);
+    printf("%d\n", 1 + 2 < 4 && 5 > 3 || 0);
+    return 0;
+}
+//// stdout
+11
+-5
+8
+1
+3
+2
+1
+//// case: local_variables_and_assignment
+#include <stdio.h>
+int main(void) {
+    int x = 10, y = 20, z;
+    z = x + y;
+    x = y = 5;
+    int w = (z = 3) + 4;
+    printf("%d %d %d %d\n", x, y, z, w);
+    x += 3; x -= 1; x *= 4; x /= 3; x %= 5;
+    printf("%d\n", x);
+    x = 6; x <<= 2; x >>= 1; x &= 0xE; x |= 1; x ^= 3;
+    printf("%d\n", x);
+    return 0;
+}
+//// stdout
+5 5 3 7
+4
+14
+//// case: increment_decrement
+#include <stdio.h>
+int main(void) {
+    int i = 5;
+    printf("%d ", i++);
+    printf("%d ", i);
+    printf("%d ", ++i);
+    printf("%d ", i--);
+    printf("%d ", --i);
+    printf("%d\n", i);
+    char c = 'a';
+    c++;
+    printf("%c\n", c);
+    return 0;
+}
+//// stdout
+5 6 7 7 5 5
+b
+//// case: if_else_chain
+#include <stdio.h>
+static const char *classify(int n) {
+    if (n < 0) return "negative";
+    else if (n == 0) return "zero";
+    else if (n < 10) return "small";
+    else if (n < 100) return "medium";
+    return "large";
+}
+int main(void) {
+    int tests[] = {-5, 0, 7, 50, 1000};
+    for (int i = 0; i < 5; i++) printf("%d: %s\n", tests[i], classify(tests[i]));
+    return 0;
+}
+//// stdout
+-5: negative
+0: zero
+7: small
+50: medium
+1000: large
+//// case: while_and_do_while
+#include <stdio.h>
+int main(void) {
+    int i = 0, sum = 0;
+    while (i < 10) { sum += i; i++; }
+    printf("%d\n", sum);
+    int n = 0;
+    do { n++; } while (n < 5);
+    printf("%d\n", n);
+    do { n--; } while (0);
+    printf("%d\n", n);
+    return 0;
+}
+//// stdout
+45
+5
+4
+//// case: for_loops_and_nesting
+#include <stdio.h>
+int main(void) {
+    for (int i = 1; i <= 4; i++) {
+        for (int j = 1; j <= i; j++) printf("%d ", i * j);
+        printf("\n");
+    }
+    int count = 0;
+    for (;;) { if (++count == 7) break; }
+    printf("%d\n", count);
+    return 0;
+}
+//// stdout
+1 
+2 4 
+3 6 9 
+4 8 12 16 
+7
+//// case: break_and_continue
+#include <stdio.h>
+int main(void) {
+    int sum = 0;
+    for (int i = 0; i < 20; i++) {
+        if (i % 2) continue;
+        if (i > 12) break;
+        sum += i;
+    }
+    printf("%d\n", sum);
+    int found = -1;
+    for (int i = 0; i < 5; i++)
+        for (int j = 0; j < 5; j++)
+            if (i * j == 6) { found = i * 10 + j; goto done; }
+done:
+    printf("%d\n", found);
+    return 0;
+}
+//// stdout
+42
+23
+//// case: switch_statement
+#include <stdio.h>
+static int f(int x) {
+    switch (x) {
+    case 1: return 10;
+    case 2:
+    case 3: return 20;
+    case 4: x += 100;
+    case 5: return x;
+    default: return -1;
+    }
+}
+int main(void) {
+    for (int i = 0; i < 8; i++) printf("%d ", f(i));
+    printf("\n");
+    int v = 3, r = 0;
+    switch (v) { case 3: r += 1; case 4: r += 10; break; case 5: r += 100; }
+    printf("%d\n", r);
+    return 0;
+}
+//// stdout
+-1 10 20 20 104 5 -1 -1 
+11
+//// case: functions_and_arguments
+#include <stdio.h>
+static int add(int a, int b) { return a + b; }
+static int mul3(int a, int b, int c) { return a * b * c; }
+static int many(int a, int b, int c, int d, int e, int f, int g, int h) { return a + 2*b + 3*c + 4*d + 5*e + 6*f + 7*g + 8*h; }
+static void greet(const char *name) { printf("hi %s\n", name); }
+int main(void) {
+    printf("%d %d\n", add(3, 4), mul3(2, 3, 4));
+    printf("%d\n", many(1, 2, 3, 4, 5, 6, 7, 8));
+    greet("there");
+    printf("%d\n", add(add(1, 2), add(3, 4)));
+    return 0;
+}
+//// stdout
+7 24
+204
+hi there
+10
+//// case: recursion_factorial_fibonacci
+#include <stdio.h>
+static long fact(int n) { return n <= 1 ? 1 : n * fact(n - 1); }
+static int fib(int n) { return n < 2 ? n : fib(n - 1) + fib(n - 2); }
+static int gcd(int a, int b) { return b == 0 ? a : gcd(b, a % b); }
+int main(void) {
+    for (int i = 0; i <= 10; i++) printf("%d! = %ld, fib = %d\n", i, fact(i), fib(i));
+    printf("%d\n", gcd(1071, 462));
+    return 0;
+}
+//// stdout
+0! = 1, fib = 0
+1! = 1, fib = 1
+2! = 2, fib = 1
+3! = 6, fib = 2
+4! = 24, fib = 3
+5! = 120, fib = 5
+6! = 720, fib = 8
+7! = 5040, fib = 13
+8! = 40320, fib = 21
+9! = 362880, fib = 34
+10! = 3628800, fib = 55
+21
+//// case: mutual_recursion
+#include <stdio.h>
+static int is_odd(int n);
+static int is_even(int n) { return n == 0 ? 1 : is_odd(n - 1); }
+static int is_odd(int n) { return n == 0 ? 0 : is_even(n - 1); }
+int main(void) {
+    printf("%d %d %d %d\n", is_even(10), is_odd(10), is_even(7), is_odd(7));
+    return 0;
+}
+//// stdout
+1 0 0 1
+//// case: global_variables
+#include <stdio.h>
+int counter = 100;
+int zero_init;
+static int hidden = 7;
+const int limit = 25;
+int next_id(void) { return counter++; }
+int main(void) {
+    printf("%d %d %d %d\n", counter, zero_init, hidden, limit);
+    next_id(); next_id();
+    printf("%d\n", counter);
+    zero_init = 5;
+    hidden *= 2;
+    printf("%d %d\n", zero_init, hidden);
+    return 0;
+}
+//// stdout
+100 0 7 25
+102
+5 14
+//// case: static_local_variables
+#include <stdio.h>
+static int tick(void) { static int n = 0; return ++n; }
+static int fresh(void) { int n = 0; return ++n; }
+int main(void) {
+    for (int i = 0; i < 4; i++) printf("%d/%d ", tick(), fresh());
+    printf("\n");
+    return 0;
+}
+//// stdout
+1/1 2/1 3/1 4/1 
+//// case: arrays_basic
+#include <stdio.h>
+int main(void) {
+    int a[5] = {5, 4, 3, 2, 1};
+    int sum = 0;
+    for (int i = 0; i < 5; i++) sum += a[i] * (i + 1);
+    printf("%d\n", sum);
+    int b[10];
+    for (int i = 0; i < 10; i++) b[i] = i * i;
+    printf("%d %d %d\n", b[0], b[5], b[9]);
+    int m[3][4];
+    for (int i = 0; i < 3; i++) for (int j = 0; j < 4; j++) m[i][j] = i * 4 + j;
+    printf("%d %d %d\n", m[0][0], m[1][2], m[2][3]);
+    printf("%zu %zu %zu\n", sizeof a, sizeof b / sizeof b[0], sizeof m);
+    return 0;
+}
+//// stdout
+35
+0 25 81
+0 6 11
+20 10 48
+//// case: array_initializers_and_zero_fill
+#include <stdio.h>
+int g[6] = {1, 2, 3};
+int main(void) {
+    int a[6] = {1, 2};
+    int b[] = {7, 8, 9};
+    int c[2][3] = {{1, 2, 3}, {4}};
+    for (int i = 0; i < 6; i++) printf("%d%d ", a[i], g[i]);
+    printf("\n%zu %d %d\n", sizeof b / sizeof b[0], b[2], c[1][0] + c[1][1]);
+    return 0;
+}
+//// stdout
+11 22 03 00 00 00 
+3 9 4
+//// case: pointers_basic
+#include <stdio.h>
+static void swap(int *a, int *b) { int t = *a; *a = *b; *b = t; }
+int main(void) {
+    int x = 3, y = 9;
+    int *p = &x;
+    *p = 10;
+    swap(&x, &y);
+    printf("%d %d\n", x, y);
+    int **pp = &p;
+    **pp += 5;
+    printf("%d\n", x);
+    int arr[4] = {10, 20, 30, 40};
+    int *q = arr;
+    printf("%d %d %d\n", *q, *(q + 2), q[3]);
+    q += 2;
+    printf("%d %ld\n", *q, (long)(q - arr));
+    return 0;
+}
+//// stdout
+9 10
+14
+10 30 40
+30 2
+//// case: pointer_arithmetic_types
+#include <stdio.h>
+int main(void) {
+    char c[8] = "abcdefg";
+    short s[4] = {1, 2, 3, 4};
+    long l[3] = {100, 200, 300};
+    char *pc = c; short *ps = s; long *pl = l;
+    printf("%c %d %ld\n", *(pc + 3), *(ps + 2), *(pl + 1));
+    printf("%ld %ld %ld\n", (char *)(pc + 5) - c, (char *)(ps + 3) - (char *)s, (char *)(pl + 2) - (char *)l);
+    printf("%d\n", (int)(&s[3] - &s[1]));
+    return 0;
+}
+//// stdout
+d 3 200
+5 6 16
+2
+//// case: strings_basic
+#include <stdio.h>
+static int my_strlen(const char *s) { int n = 0; while (*s++) n++; return n; }
+static void my_strcpy(char *d, const char *s) { while ((*d++ = *s++)); }
+int main(void) {
+    char buf[32];
+    my_strcpy(buf, "copy me");
+    printf("[%s] %d\n", buf, my_strlen(buf));
+    const char *p = "literal";
+    printf("%s %c %d\n", p, p[2], my_strlen(p));
+    char r[6] = "hello";
+    for (int i = 0; i < 5 / 2; i++) { char t = r[i]; r[i] = r[4 - i]; r[4 - i] = t; }
+    printf("%s\n", r);
+    return 0;
+}
+//// stdout
+[copy me] 7
+literal t 7
+olleh
+//// case: char_arithmetic
+#include <stdio.h>
+int main(void) {
+    char c = 'A';
+    c += 2;
+    printf("%c %d\n", c, c);
+    unsigned char u = 250;
+    u += 10;
+    printf("%d\n", u);
+    signed char s = 127;
+    s++;
+    printf("%d\n", s);
+    char up = 'q' - 'a' + 'A';
+    printf("%c\n", up);
+    return 0;
+}
+//// stdout
+C 67
+4
+-128
+Q
+//// case: ternary_and_short_circuit
+#include <stdio.h>
+static int calls = 0;
+static int side(int v) { calls++; return v; }
+int main(void) {
+    int a = 5, b = 9;
+    printf("%d %d\n", a > b ? a : b, a < b ? a : b);
+    printf("%d\n", side(0) && side(1));
+    printf("%d\n", side(1) || side(1));
+    int r = side(1) && side(2);
+    printf("%d %d\n", r, calls);
+    int x = a > 3 ? (b > 3 ? 1 : 2) : 3;
+    printf("%d\n", x);
+    return 0;
+}
+//// stdout
+9 5
+0
+1
+1 4
+1
+//// case: comma_and_conditional_expressions
+#include <stdio.h>
+int main(void) {
+    int a = (1, 2, 3);
+    int b, c;
+    b = (c = 4, c + 1);
+    printf("%d %d %d\n", a, b, c);
+    int i, j;
+    for (i = 0, j = 10; i < j; i += 3, j -= 3) printf("%d,%d ", i, j);
+    printf("\n");
+    return 0;
+}
+//// stdout
+3 5 4
+0,10 3,7 
+//// case: exit_status_from_main
+#include <stdio.h>
+int main(void) {
+    printf("about to exit with 7\n");
+    return 7;
+}
+//// exit: 7
+//// stdout
+about to exit with 7
+//// case: large_local_array_and_loop
+#include <stdio.h>
+int main(void) {
+    int a[1000];
+    long sum = 0;
+    for (int i = 0; i < 1000; i++) a[i] = i % 17;
+    for (int i = 0; i < 1000; i++) sum += a[i];
+    printf("%ld\n", sum);
+    return 0;
+}
+//// stdout
+7979
