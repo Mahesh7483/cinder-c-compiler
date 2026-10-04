@@ -1,0 +1,505 @@
+//// case: opt_signed_div_rem_by_powers_of_two
+#include <stdio.h>
+int main(void) {
+    long sum = 0;
+    for (int x = -300; x <= 300; x++) {
+        sum += x / 2 + x / 4 * 3 + x / 8 * 5 + x / 64 * 7;
+        sum += (x % 2) * 11 + (x % 4) * 13 + (x % 8) * 17 + (x % 64) * 19;
+    }
+    printf("%ld\n", sum);
+    int m = -2147483647 - 1;
+    printf("%d %d %d %d\n", m / 2, m % 8, m / 65536, m % 65536);
+    int p = 2147483647;
+    printf("%d %d %d %d\n", p / 2, p % 8, p / 1073741824, p % 1073741824);
+    for (int x = -9; x <= 9; x += 3) printf("%d:%d,%d,%d ", x, x / 4, x % 4, -x / 4);
+    printf("\n");
+    long long big = -9223372036854775807LL - 1;
+    printf("%lld %lld %lld\n", big / 2, big % 16, (big + 12345) / 1024);
+    return 0;
+}
+//// stdout
+0
+-1073741824 0 -32768 0
+1073741823 7 1 1073741823
+-9:-2,-1,2 -6:-1,-2,1 -3:0,-3,0 0:0,0,0 3:0,3,0 6:1,2,-1 9:2,1,-2 
+-4611686018427387904 0 -9007199254740979
+//// case: opt_unsigned_div_rem_shift_identities
+#include <stdio.h>
+int main(void) {
+    unsigned long long acc = 0;
+    for (unsigned x = 0; x < 600; x++) {
+        acc += x / 2u + x / 16u * 3u + x % 2u * 5u + x % 32u * 7u + x * 8u + x * 1u + (x + 0u) - 0u;
+    }
+    printf("%llu\n", acc);
+    unsigned u = 4294967295u;
+    printf("%u %u %u %u\n", u / 16, u % 16, u / 2147483648u, u % 2147483648u);
+    unsigned long long w = 18446744073709551615ull;
+    printf("%llu %llu %llu\n", w / 4096, w % 4096, w / 9223372036854775808ull);
+    return 0;
+}
+//// stdout
+1985484
+268435455 15 1 2147483647
+4503599627370495 4095 1
+//// case: opt_constants_fold_like_the_hardware
+#include <stdio.h>
+static int id(int x) { return x; }
+int main(void) {
+    int a = id(2147483647);
+    unsigned u = (unsigned)a + 1u;
+    printf("%d %u\n", a + 0, u);
+    signed char sc = (signed char)id(200);
+    unsigned char uc = (unsigned char)id(300);
+    short sh = (short)id(70000);
+    printf("%d %d %d\n", sc, uc, sh);
+    printf("%d %d %d\n", -7 / 2, -7 % 2, 7 / -2);
+    printf("%d %d\n", 1 << 30, -16 >> 2);
+    printf("%d %d %d\n", -1 < 0u, -1 < 0, (unsigned char)255 == 255);
+    printf("%d %d\n", (int)-2.9, (int)2.9);
+    printf("%.1f %.1f\n", (double)(float)16777217, (double)(float)0.1);
+    float f = 16777216.0f;
+    printf("%.1f %.1f\n", f + 1.0f, f + 2.0f);
+    long long big = 9007199254740993LL;
+    printf("%.1f %.1f\n", (double)big, (double)(float)big);
+    printf("%lld %llu\n", (long long)(unsigned char)id(-1), (unsigned long long)(int)id(-1));
+    printf("%d\n", id(5) * id(-3) + id(7) % id(4) - (id(9) ^ id(5)) + (id(12) & id(10)) + (id(1) | id(6)));
+    return 0;
+}
+//// stdout
+2147483647 2147483648
+-56 44 4464
+-3 -1 -3
+1073741824 -4
+0 1 1
+-2 2
+16777216.0 0.1
+16777216.0 16777218.0
+9007199254740992.0 9007199254740992.0
+255 18446744073709551615
+-9
+//// case: opt_guarded_division_is_not_hoisted
+#include <stdio.h>
+static int run(int d, int n) {
+    int s = 0;
+    for (int i = 0; i < n; i++) {
+        if (d != 0) s += 1000 / d;
+        s += i;
+    }
+    return s;
+}
+int main(void) {
+    printf("%d %d %d\n", run(0, 10), run(7, 10), run(-3, 5));
+    return 0;
+}
+//// stdout
+45 1465 -1655
+//// case: opt_loop_invariant_motion_respects_stores
+#include <stdio.h>
+int g = 5;
+int arr[8];
+static int bump(int n) {
+    int s = 0;
+    for (int i = 0; i < n; i++) {
+        s += g * 2;
+        g += 1;
+    }
+    return s;
+}
+static int through_pointer(int *p, int n) {
+    int s = 0;
+    for (int i = 0; i < n; i++) {
+        s += *p;
+        arr[0] = i;
+    }
+    return s;
+}
+int main(void) {
+    int r = bump(6);
+    printf("%d %d\n", r, g);
+    arr[0] = 100;
+    printf("%d\n", through_pointer(&arr[0], 5));
+    printf("%d\n", through_pointer(&arr[1], 5));
+    return 0;
+}
+//// stdout
+90 11
+106
+0
+//// case: opt_loop_invariant_load_not_hoisted_past_calls
+#include <stdio.h>
+int counter;
+static void tick(void) { counter += 3; }
+int main(void) {
+    int s = 0;
+    for (int i = 0; i < 5; i++) {
+        s += counter;
+        tick();
+    }
+    printf("%d %d\n", s, counter);
+    return 0;
+}
+//// stdout
+30 15
+//// case: opt_nested_loop_invariants
+#include <stdio.h>
+int main(void) {
+    int a = 7, b = 9, n = 12;
+    long s = 0;
+    for (int i = 0; i < n; i++)
+        for (int j = 0; j < n; j++)
+            for (int k = 0; k < 3; k++) s += a * b + i * 2 + j % 3 - k;
+    printf("%ld\n", s);
+    return 0;
+}
+//// stdout
+31968
+//// case: opt_store_load_forwarding_and_aliasing
+#include <stdio.h>
+static int same(int *p, int *q) {
+    *p = 1;
+    *q = 2;
+    return *p;
+}
+static int idx(int *a, int i, int j) {
+    a[i] = 10;
+    a[j] = 20;
+    return a[i] + a[j];
+}
+int main(void) {
+    int x = 0, y = 0;
+    printf("%d %d\n", same(&x, &y), same(&x, &x));
+    int a[4] = {0};
+    printf("%d %d\n", idx(a, 1, 2), idx(a, 3, 3));
+    return 0;
+}
+//// stdout
+1 2
+30 40
+//// case: opt_redundant_expressions_and_noncommutative_ops
+#include <stdio.h>
+static int f(int a, int b) { return (a - b) * 3 + (b - a) * 5 + (a + b) * (b + a) + (a * b) + (b * a); }
+int main(void) {
+    printf("%d %d %d\n", f(7, 3), f(3, 7), f(-4, 9));
+    return 0;
+}
+//// stdout
+134 150 -21
+//// case: opt_inlined_byvalue_struct_is_a_copy
+#include <stdio.h>
+struct S { int v[6]; };
+static int mutate(struct S s) {
+    s.v[0] += 100;
+    s.v[5] = 7;
+    return s.v[0] + s.v[5];
+}
+int main(void) {
+    struct S s = {{1, 2, 3, 4, 5, 6}};
+    int r = mutate(s);
+    printf("%d %d %d\n", r, s.v[0], s.v[5]);
+    r += mutate(s);
+    printf("%d %d\n", r, s.v[0]);
+    return 0;
+}
+//// stdout
+108 1 6
+216 1
+//// case: opt_inlined_functions_with_loops_and_early_returns
+#include <stdio.h>
+static int find(const int *a, int n, int x) {
+    for (int i = 0; i < n; i++)
+        if (a[i] == x) return i;
+    return -1;
+}
+static int clamp(int v, int lo, int hi) {
+    if (v < lo) return lo;
+    if (v > hi) return hi;
+    return v;
+}
+static int sum_to(int n) {
+    int s = 0;
+    for (int i = 1; i <= n; i++) s += i;
+    return s;
+}
+int main(void) {
+    int a[] = {5, 3, 9, 1, 7};
+    int t = 0;
+    for (int i = -2; i < 12; i++) t += find(a, 5, i) + clamp(i, 0, 8) + sum_to(clamp(i, 0, 5));
+    printf("%d\n", t);
+    return 0;
+}
+//// stdout
+186
+//// case: opt_static_function_used_directly_and_by_address
+#include <stdio.h>
+static int twice(int x) { return 2 * x; }
+static int thrice(int x) { return 3 * x; }
+int main(void) {
+    int (*table[])(int) = {twice, thrice};
+    int s = twice(5) + thrice(5);
+    for (int i = 0; i < 2; i++) s += table[i](10);
+    printf("%d\n", s);
+    return 0;
+}
+//// stdout
+75
+//// case: opt_tail_recursion_is_a_loop
+#include <stdio.h>
+static long sum_to(long n, long acc) {
+    if (n == 0) return acc;
+    return sum_to(n - 1, acc + n);
+}
+static long collatz(long n, long steps) {
+    if (n == 1) return steps;
+    return collatz(n % 2 ? 3 * n + 1 : n / 2, steps + 1);
+}
+int main(void) {
+    printf("%ld\n", sum_to(50000000L, 0));
+    printf("%ld\n", collatz(27, 0));
+    return 0;
+}
+//// min-opt: 2
+//// stdout
+1250000025000000
+111
+//// case: opt_mutual_tail_calls_run_in_constant_stack
+#include <stdio.h>
+int is_odd(unsigned long n);
+int is_even(unsigned long n) { return n == 0 ? 1 : is_odd(n - 1); }
+int is_odd(unsigned long n) { return n == 0 ? 0 : is_even(n - 1); }
+int main(void) {
+    printf("%d %d %d\n", is_even(40000000ul), is_odd(40000000ul), is_even(40000001ul));
+    return 0;
+}
+//// min-opt: 2
+//// stdout
+1 0 0
+//// case: opt_indirect_tail_calls
+#include <stdio.h>
+struct ops { long (*step[2])(const struct ops *, long, long); };
+static long ping(const struct ops *t, long n, long acc) { return n == 0 ? acc : t->step[1](t, n - 1, acc + 1); }
+static long pong(const struct ops *t, long n, long acc) { return n == 0 ? acc : t->step[0](t, n - 1, acc + 2); }
+int main(void) {
+    struct ops t = {{ping, pong}};
+    printf("%ld\n", t.step[0](&t, 30000000, 0));
+    return 0;
+}
+//// min-opt: 2
+//// stdout
+45000000
+//// case: opt_tail_call_swaps_arguments
+#include <stdio.h>
+static long show(long a, long b, long c, long d, long e, long f) { return a * 1 + b * 10 + c * 100 + d * 1000 + e * 10000 + f * 100000; }
+long rotate(long a, long b, long c, long d, long e, long f) { return show(f, a, b, c, d, e); }
+long reverse(long a, long b, long c, long d, long e, long f) { return show(f, e, d, c, b, a); }
+double mix(double a, long n, double b) { return a * 2 + n + b / 2; }
+double mix_tail(long n, double b, double a) { return mix(a, n, b); }
+int main(void) {
+    printf("%ld %ld\n", rotate(1, 2, 3, 4, 5, 6), reverse(1, 2, 3, 4, 5, 6));
+    printf("%.2f\n", mix_tail(5, 3.0, 1.5));
+    return 0;
+}
+//// stdout
+543216 123456
+9.50
+//// case: opt_tail_call_restores_callee_saved_registers
+#include <stdio.h>
+long leaf(long x) { return x * 3 + 1; }
+long busy(long a, long b, long c, long d, long e) {
+    long t1 = a * b, t2 = b * c, t3 = c * d, t4 = d * e, t5 = e * a;
+    long r = leaf(t1 + t2) + t3 + t4 + t5;
+    r += leaf(r) % 7;
+    return leaf(r + t1 - t5);
+}
+int main(void) {
+    long keep1 = 11, keep2 = 22, keep3 = 33, keep4 = 44;
+    long r = busy(1, 2, 3, 4, 5);
+    keep1 += r;
+    keep2 += busy(5, 4, 3, 2, 1);
+    printf("%ld %ld %ld %ld %ld\n", r, keep1, keep2, keep3, keep4);
+    return 0;
+}
+//// stdout
+193 204 404 33 44
+//// case: opt_loop_carried_swaps_and_lost_copies
+#include <stdio.h>
+int main(void) {
+    long a = 0, b = 1;
+    for (int i = 0; i < 40; i++) { long t = a; a = b; b = t + b; }
+    printf("%ld %ld\n", a, b);
+    int x = 1, y = 2, z = 3;
+    for (int i = 0; i < 7; i++) { int t = x; x = y; y = z; z = t + i; }
+    printf("%d %d %d\n", x, y, z);
+    int p = 0, q = 100;
+    while (p < q) { int t = p; p = q - p; q = t + 1; if (p == q) break; }
+    printf("%d %d\n", p, q);
+    return 0;
+}
+//// stdout
+102334155 165580141
+7 10 10
+100 1
+//// case: opt_switch_on_constants_and_variables
+#include <stdio.h>
+static int classify(int v) {
+    switch (v) {
+    case 0: return 10;
+    case 1:
+    case 2: return 20;
+    case 5: v += 100;
+    case 6: return v;
+    default: return -1;
+    }
+}
+int main(void) {
+    int t = 0;
+    for (int i = -1; i < 9; i++) t = t * 3 + classify(i);
+    printf("%d\n", t);
+    switch (3) { case 3: printf("three\n"); break; case 4: printf("four\n"); }
+    int k = 4;
+    switch (k) { case 3: printf("three\n"); break; case 4: printf("four\n"); default: printf("fall\n"); }
+    return 0;
+}
+//// stdout
+106808
+three
+four
+fall
+//// case: opt_comparisons_are_nan_correct
+#include <stdio.h>
+#include <math.h>
+static int ge(double a, double b) { return !(a < b); }
+static int ne(double a, double b) { return (a == b) == 0; }
+static int le(double a, double b) { return (a > b) == 0; }
+int main(void) {
+    double nan = NAN, one = 1.0, two = 2.0;
+    printf("%d %d %d\n", ge(one, two), ge(two, one), ge(nan, one));
+    printf("%d %d %d\n", ne(one, one), ne(one, two), ne(nan, nan));
+    printf("%d %d %d\n", le(one, two), le(two, one), le(nan, one));
+    printf("%d %d\n", nan != nan, !(nan == nan));
+    return 0;
+}
+//// stdout
+0 1 1
+0 1 1
+1 0 1
+1 1
+//// case: opt_integer_comparison_identities
+#include <stdio.h>
+static int f(unsigned u, int s) { return (u >= 0u) + (u < 0u) * 10 + (u <= 0u) * 100 + (u > 0u) * 1000 + (s == s) + (s < s) * 7 + !(s < 3) * 3; }
+int main(void) {
+    printf("%d %d %d %d\n", f(0, 0), f(5, 3), f(4294967295u, -1), f(1, 2));
+    return 0;
+}
+//// stdout
+102 1005 1002 1002
+//// case: opt_dead_array_and_dead_stores_keep_side_effects
+#include <stdio.h>
+static int calls;
+static int touch(int x) { calls++; return x; }
+int main(void) {
+    int buf[4];
+    buf[0] = touch(1);
+    buf[1] = touch(2);
+    int unused = touch(3) * 7;
+    int x = 5;
+    x = 6;
+    x = touch(x);
+    volatile int v = 0;
+    v = 1;
+    v = 2;
+    printf("%d %d\n", calls, x + v);
+    return 0;
+}
+//// stdout
+4 8
+//// case: opt_pointer_arithmetic_reassociation
+#include <stdio.h>
+int main(void) {
+    int a[16];
+    for (int i = 0; i < 16; i++) a[i] = i * i;
+    int *p = a;
+    int s = 0;
+    for (int i = 0; i < 6; i++) s += *(p + 3 + i) + (p + 4)[i] + *((p + 10) - i);
+    printf("%d %ld %ld\n", s, (a + 9) - (a + 2), &a[12] - &a[0]);
+    char c[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+    char *q = c + 7;
+    printf("%d %d %d\n", q[-7], *(q - 3), (int)(q - c));
+    return 0;
+}
+//// stdout
+825 7 12
+1 5 7
+//// case: opt_register_pressure_after_inlining
+#include <stdio.h>
+static long mixer(long a, long b, long c, long d) { return (a ^ b) + (c & d) * 3 + (a | d) - (b << 2); }
+int main(void) {
+    long v[12];
+    for (int i = 0; i < 12; i++) v[i] = i * 7 + 3;
+    long acc = 0;
+    for (int r = 0; r < 50; r++) {
+        long a = v[0] + r, b = v[1] - r, c = v[2] * 2, d = v[3] + 1, e = v[4], f = v[5], g = v[6], h = v[7];
+        long i = v[8], j = v[9], k = v[10], l = v[11];
+        acc += mixer(a, b, c, d) + mixer(e, f, g, h) + mixer(i, j, k, l) + mixer(a + e, b + f, c + g, d + h);
+        acc += a + b + c + d + e + f + g + h + i + j + k + l;
+        v[r % 12] += acc & 15;
+    }
+    printf("%ld\n", acc);
+    return 0;
+}
+//// stdout
+51704
+//// case: opt_recursive_functions_stay_correct
+#include <stdio.h>
+static int fib(int n) { return n < 2 ? n : fib(n - 1) + fib(n - 2); }
+static int ack(int m, int n) { return m == 0 ? n + 1 : n == 0 ? ack(m - 1, 1) : ack(m - 1, ack(m, n - 1)); }
+static long fact(int n) { return n <= 1 ? 1 : n * fact(n - 1); }
+int main(void) {
+    printf("%d %d %ld\n", fib(22), ack(2, 3), fact(15));
+    return 0;
+}
+//// stdout
+17711 9 1307674368000
+//// case: opt_short_circuit_and_ternary_merge_values
+#include <stdio.h>
+static int calls;
+static int t(int v) { calls++; return v; }
+int main(void) {
+    int total = 0;
+    for (int i = 0; i < 12; i++) {
+        int r = (i % 3 == 0 && t(i) > 3) || (i % 4 == 1 && t(i + 100) > 100);
+        int q = i > 5 ? (i % 2 ? i * 2 : i / 2) : (i == 3 ? -1 : 0);
+        total += r * 10 + q;
+    }
+    printf("%d %d\n", total, calls);
+    return 0;
+}
+//// stdout
+105 6
+//// case: opt_global_state_through_static_helpers
+#include <stdio.h>
+static int state = 1;
+static int next(void) { state = state * 5 + 3; return state & 255; }
+static int peek(void) { return state; }
+int main(void) {
+    int s = 0;
+    for (int i = 0; i < 20; i++) s += next() + peek() % 7;
+    printf("%d %d\n", s, state);
+    return 0;
+}
+//// stdout
+1928 -833816875
+//// case: opt_float_pipeline
+#include <stdio.h>
+static double poly(double x) { return ((2.0 * x + 3.0) * x - 4.0) * x + 0.5; }
+static float fpoly(float x) { return ((2.0f * x + 3.0f) * x - 4.0f) * x + 0.5f; }
+int main(void) {
+    double d = 0;
+    float f = 0;
+    for (int i = -10; i <= 10; i++) { d += poly(i * 0.25); f += fpoly(i * 0.25f); }
+    printf("%.6f %.4f\n", d, f);
+    printf("%.3f %.3f %d %d\n", poly(2.0), fpoly(2.0f), (int)poly(1.5), (int)-poly(1.5));
+    return 0;
+}
+//// stdout
+154.875000 154.8750
+20.500 20.500 8 -8

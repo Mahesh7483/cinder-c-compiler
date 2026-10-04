@@ -20,6 +20,8 @@
 //!   `flags: <args>`       extra compiler flags
 //!   `expect-error: <txt>` the compile must fail and its diagnostics contain <txt>
 //!   `skip-gcc`            do not cross-check this case against GCC
+//!   `min-opt: <n>`        only run at -O<n> and above (GCC's reference build uses -O<n> too);
+//!                         for programs that rely on tail calls or inlining to fit the stack
 //!
 //! Environment:
 //!   `CINDER_E2E_OPTS`     comma-separated -O levels to test (default "0,1,2")
@@ -44,6 +46,7 @@ struct Case {
     flags: Vec<String>,
     expect_error: Option<String>,
     skip_gcc: bool,
+    min_opt: u8,
     has_stdout: bool,
     file: String,
 }
@@ -92,6 +95,8 @@ fn parse_bundle(path: &Path) -> Vec<Case> {
                 c.expect_error = Some(e.to_string());
             } else if rest == "skip-gcc" {
                 c.skip_gcc = true;
+            } else if let Some(n) = rest.strip_prefix("min-opt: ") {
+                c.min_opt = n.trim().parse().unwrap();
             } else {
                 panic!("{}: unknown directive {:?}", path.display(), rest);
             }
@@ -209,7 +214,8 @@ fn compile_gcc(c: &Case, dir: &Path) -> Result<PathBuf, String> {
     fs::write(&src, &c.source).unwrap();
     let exe = dir.join("ref");
     let out = Command::new("gcc")
-        .args(["-O0", "-w", "-fno-builtin", "-o"])
+        .arg(format!("-O{}", c.min_opt))
+        .args(["-w", "-fno-builtin", "-o"])
         .arg(&exe)
         .arg(&src)
         .arg("-lm")
@@ -223,6 +229,9 @@ fn compile_gcc(c: &Case, dir: &Path) -> Result<PathBuf, String> {
 }
 
 fn check_case(c: &Case, opt: &str, diff_gcc: bool) -> Result<(), String> {
+    if opt.parse::<u8>().is_ok_and(|o| o < c.min_opt) {
+        return Ok(());
+    }
     let dir = workdir(&format!("{}-O{}", c.name, opt));
     if let Some(expected) = &c.expect_error {
         return match compile_cinder(c, opt, &dir) {
@@ -288,6 +297,9 @@ fn bless(path: &Path) {
         }
         if c2.skip_gcc {
             text.push_str("//// skip-gcc\n");
+        }
+        if c2.min_opt > 0 {
+            text.push_str(&format!("//// min-opt: {}\n", c2.min_opt));
         }
         if let Some(e) = &c2.expect_error {
             text.push_str(&format!("//// expect-error: {}\n", e));
