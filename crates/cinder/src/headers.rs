@@ -26,6 +26,24 @@ bundle! {
     "stdlib.h", "stdnoreturn.h", "string.h", "time.h", "unistd.h", "sys/types.h",
 }
 
+/// A note for "header not found": says *why* for well-known headers Cinder cannot provide (parallel
+/// programming runtimes), and otherwise, for `<...>` includes, lists what it does bundle.
+pub fn missing_header_hint(name: &str, angle: bool) -> Option<String> {
+    let base = name.rsplit('/').next().unwrap_or(name);
+    match base {
+        "omp.h" => Some(
+            "OpenMP is not supported: Cinder has no omp.h and does not implement '#pragma omp' (build the program without OpenMP)"
+                .into(),
+        ),
+        "mpi.h" | "mpio.h" => Some("MPI is not supported: Cinder has no MPI headers or runtime".into()),
+        "pthread.h" | "semaphore.h" | "threads.h" | "stdatomic.h" => {
+            Some("threads and atomics are not supported yet (no pthread.h, threads.h or stdatomic.h)".into())
+        }
+        _ if angle => Some(format!("Cinder bundles only these standard headers: {}", BUNDLED_NAMES.join(", "))),
+        _ => None,
+    }
+}
+
 /// Names answered by `__has_builtin`.
 pub fn is_known_builtin(name: &str) -> bool {
     matches!(
@@ -56,5 +74,16 @@ mod tests {
             assert!(bundled(n).is_some(), "{n}");
         }
         assert!(bundled("nonexistent.h").is_none());
+    }
+
+    #[test]
+    fn missing_header_hints() {
+        assert!(missing_header_hint("omp.h", true).unwrap().contains("OpenMP is not supported"));
+        assert!(missing_header_hint("mpi.h", false).unwrap().contains("MPI is not supported"));
+        assert!(missing_header_hint("sys/mpi.h", true).unwrap().contains("MPI is not supported"));
+        assert!(missing_header_hint("pthread.h", true).unwrap().contains("threads"));
+        let generic = missing_header_hint("wchar.h", true).unwrap();
+        assert!(generic.contains("stdio.h") && generic.contains("sys/types.h"));
+        assert_eq!(missing_header_hint("mine.h", false), None);
     }
 }

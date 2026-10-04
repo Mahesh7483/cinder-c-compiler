@@ -460,6 +460,25 @@ fn missing_include_is_fatal() {
 }
 
 #[test]
+fn missing_include_explains_unsupported_runtimes() {
+    for (src, needle) in [
+        ("#include <omp.h>\n", "OpenMP is not supported"),
+        ("#include \"mpi.h\"\n", "MPI is not supported"),
+        ("#include <pthread.h>\n", "threads and atomics"),
+        ("#include <wchar.h>\n", "bundles only these standard headers"),
+    ] {
+        let o = run(src);
+        assert!(o.sess.diags.is_fatal(), "{src}");
+        let notes: Vec<String> =
+            o.sess.diags.diagnostics().iter().flat_map(|d| d.notes.iter().map(|n| n.message.clone())).collect();
+        assert!(notes.iter().any(|n| n.contains(needle)), "{src}: {notes:?}");
+    }
+    // a project header that is simply missing gets no list of bundled headers
+    let o = run("#include \"mine.h\"\n");
+    assert!(o.sess.diags.diagnostics().iter().all(|d| d.notes.is_empty()));
+}
+
+#[test]
 fn include_depth_limit() {
     let d = tmpdir();
     std::fs::write(d.join("loop.h"), "#include \"loop.h\"\n").unwrap();

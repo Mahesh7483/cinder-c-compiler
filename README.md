@@ -203,6 +203,10 @@ Other limits:
 
 * **Platform:** x86-64 Linux, System V ABI only. Needs the system `as` and `cc` for assembling and linking. Position-dependent
   code (`-no-pie`); `-fPIC` is accepted and ignored, so no shared libraries.
+* **Parallel programming:** no OpenMP (`<omp.h>` is not found, and `#pragma omp` lines are ignored with
+  `-Wunknown-pragmas`), no MPI (`<mpi.h>`), no threads or atomics (`<pthread.h>`, `<threads.h>`, `<stdatomic.h>`).
+  A missing header is reported with a note saying so. The playground additionally runs programs without network access
+  and with at most 16 processes, so MPI-style programs could not run there anyway.
 * **Libc surface:** only the headers listed above are bundled (no `signal.h`, `setjmp.h`, `wchar.h`, `locale.h`,
   `complex.h`, `stdatomic.h`, `threads.h`, `fenv.h`, …). `-isystem /usr/include` can be tried, but glibc's headers use many
   GNU extensions and are not guaranteed to parse.

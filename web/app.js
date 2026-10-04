@@ -287,7 +287,7 @@ function renderDiagnostics(list, extraText = '') {
     for (const n of d.notes || []) {
       const note = document.createElement('span');
       note.className = 'diag-note';
-      note.textContent = `note: ${n.message} (line ${n.line})`;
+      note.textContent = `note: ${n.message}${n.line ? ` (line ${n.line})` : ''}`;
       b.appendChild(note);
     }
     b.addEventListener('click', () => { source.goTo(d.line, d.col); if (document.body.dataset.view !== 'source') setView('source'); });

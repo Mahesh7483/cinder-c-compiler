@@ -791,10 +791,12 @@ impl<'s> Preprocessor<'s> {
         let Some((name, angle)) = self.parse_include_operand(rest.to_vec(), span) else { return };
         let cur = self.frames.last().map(|f| f.file).unwrap_or(0);
         let Some(res) = self.resolve_include(&name, angle, cur) else {
-            self.sess.diags.emit(Diagnostic::fatal(
-                rest.first().map(|t| t.span).unwrap_or(span),
-                format!("'{}' file not found", name),
-            ));
+            let mut d =
+                Diagnostic::fatal(rest.first().map(|t| t.span).unwrap_or(span), format!("'{}' file not found", name));
+            if let Some(hint) = headers::missing_header_hint(&name, angle) {
+                d = d.with_note(Span::DUMMY, hint);
+            }
+            self.sess.diags.emit(d);
             return;
         };
         if self.once.contains(&res.key) {
