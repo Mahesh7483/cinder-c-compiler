@@ -78,13 +78,13 @@ pub fn compute_succs(mf: &mut MFunc) {
                     s.push(t);
                     falls = true;
                 }
-                Op::Ret | Op::Ud2 => falls = false,
+                Op::Ret | Op::Ud2 | Op::TailCall(_) => falls = false,
                 _ => {}
             }
         }
         // `falls` reflects the last control-flow instruction in the block
         if let Some(last) = mf.blocks[b].insts.iter().rev().find(|i| !matches!(i.op, Op::Loc(_))) {
-            falls = !matches!(last.op, Op::Jmp(_) | Op::Ret | Op::Ud2);
+            falls = !matches!(last.op, Op::Jmp(_) | Op::Ret | Op::Ud2 | Op::TailCall(_));
         }
         if falls && k + 1 < n {
             s.push(mf.layout[k + 1]);

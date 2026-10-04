@@ -84,7 +84,7 @@ impl Type {
 }
 
 /// An instruction operand.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Operand {
     Value(ValueId),
     /// Integer constant of the given type (value sign-extended to 64 bits).

@@ -106,7 +106,8 @@ impl<'a> Emitter<'a> {
         }
     }
 
-    fn epilogue(&mut self, mf: &MFunc) {
+    /// Restore callee-saved registers and the caller's frame (everything but the `ret`).
+    fn leave_frame(&mut self, mf: &MFunc) {
         let k = mf.used_callee_saved.len() as i32;
         if k == 0 {
             self.out.push_str("\tleave\n");
@@ -117,6 +118,10 @@ impl<'a> Emitter<'a> {
             }
             self.out.push_str("\tpopq %rbp\n");
         }
+    }
+
+    fn epilogue(&mut self, mf: &MFunc) {
+        self.leave_frame(mf);
         self.out.push_str("\tret\n");
     }
 
@@ -270,6 +275,22 @@ impl<'a> Emitter<'a> {
                     Target::Reg(r) => format!("*{}", self.reg(r, Sz::Q)),
                 };
                 format!("\tcall {}\n", target)
+            }
+            Op::TailCall(info) => {
+                let target = match &info.target {
+                    Target::Sym(s) => {
+                        let name = self.sym_name(*s);
+                        let defined = matches!(self.m.syms[s.idx()].body, SymBody::Func { defined: true });
+                        if defined {
+                            name
+                        } else {
+                            format!("{}@PLT", name)
+                        }
+                    }
+                    Target::Reg(r) => format!("*{}", self.reg(r, Sz::Q)),
+                };
+                self.leave_frame(mf);
+                format!("\tjmp {}\n", target)
             }
             Op::Ret => {
                 self.epilogue(mf);

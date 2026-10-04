@@ -152,7 +152,7 @@ impl<'a> Isel<'a> {
                 self.emit(Op::CMov(Cc::Ne), widen(Sz::of(*ty)), MOp::Reg(d), MOp::Reg(ar));
             }
             InstKind::Phi { .. } => {}
-            InstKind::Call { callee, args, rets, variadic, .. } => self.call(i, callee, args, rets, *variadic),
+            InstKind::Call { callee, args, rets, variadic, tail } => self.call(i, callee, args, rets, *variadic, *tail),
             InstKind::Trap => self.emit_bare(Op::Ud2),
         }
     }
@@ -491,7 +491,7 @@ impl<'a> Isel<'a> {
 
     // ───────────────────────────── calls ─────────────────────────────
 
-    fn call(&mut self, i: &Inst, callee: &Callee, args: &[CallArg], rets: &[Type], variadic: bool) {
+    fn call(&mut self, i: &Inst, callee: &Callee, args: &[CallArg], rets: &[Type], variadic: bool, tail: bool) {
         let f = self.f;
         let descs: Vec<ArgDesc> = args
             .iter()
@@ -542,6 +542,22 @@ impl<'a> Isel<'a> {
             self.emit(Op::Mov, Sz::L, MOp::Reg(Reg::P(RAX)), MOp::Imm(xmm_used as i64));
             uses.push(RAX);
         }
+        if tail {
+            // The frame is restored before the jump, so an indirect target must not
+            // sit in a callee-saved register: park it in r11 (never allocated).
+            let target = match callee {
+                Callee::Direct(s) => Target::Sym(*s),
+                Callee::Indirect(o) => {
+                    let t = self.reg(*o);
+                    self.emit(Op::Mov, Sz::Q, MOp::Reg(Reg::P(R11)), MOp::Reg(t));
+                    uses.push(R11);
+                    Target::Reg(Reg::P(R11))
+                }
+            };
+            let info = CallInfo { target, uses, defs: Vec::new() };
+            self.emit(Op::TailCall(Box::new(info)), Sz::Q, MOp::None, MOp::None);
+            return;
+        }
         let target = match callee {
             Callee::Direct(s) => Target::Sym(*s),
             Callee::Indirect(o) => Target::Reg(self.reg(*o)),
@@ -576,6 +592,12 @@ impl<'a> Isel<'a> {
     pub(super) fn terminator(&mut self, bi: usize) {
         let f = self.f;
         let b = &f.blocks[bi];
+        // a tail call already left the function
+        if let Some(&last) = b.insts.last() {
+            if matches!(f.insts[last.idx()].kind, InstKind::Call { tail: true, .. }) {
+                return;
+            }
+        }
         match &b.term {
             Term::Br(t) => {
                 self.emit_phi_copies(BlockId(bi as u32), *t);

@@ -285,6 +285,8 @@ pub enum Op {
     Jmp(usize),
     Jcc(Cc, usize),
     Call(Box<CallInfo>),
+    /// A call in tail position: restore the frame, then `jmp` to the target.
+    TailCall(Box<CallInfo>),
     Ret,
     Ud2,
     // scalar floating point (`sz` = L for single, Q for double)
@@ -368,13 +370,14 @@ fn dst_access(op: &Op) -> Option<Acc> {
         Add | Sub | And | Or | Xor | Imul | Neg | Not | Shl | Shr | Sar | CMov(_) | FAdd | FSub | FMul | FDiv
         | Xorps => Some(Acc::UseDef),
         Cmp | Test | Ucomi => Some(Acc::Use),
-        Idiv | Div | SignExtAccum | Jmp(_) | Jcc(..) | Call(_) | Ret | Ud2 | RepMovsb | RepStosb | Loc(_) => None,
+        Idiv | Div | SignExtAccum | Jmp(_) | Jcc(..) | Call(_) | TailCall(_) | Ret | Ud2 | RepMovsb | RepStosb
+        | Loc(_) => None,
     }
 }
 
 impl MInst {
     pub fn for_each_reg(&self, f: &mut impl FnMut(Reg, Acc)) {
-        if let Op::Call(info) = &self.op {
+        if let Op::Call(info) | Op::TailCall(info) = &self.op {
             if let Target::Reg(r) = &info.target {
                 f(*r, Acc::Use);
             }
@@ -396,7 +399,7 @@ impl MInst {
     }
 
     pub fn for_each_reg_mut(&mut self, f: &mut impl FnMut(&mut Reg, Acc)) {
-        if let Op::Call(info) = &mut self.op {
+        if let Op::Call(info) | Op::TailCall(info) = &mut self.op {
             if let Target::Reg(r) = &mut info.target {
                 f(r, Acc::Use);
             }
@@ -427,12 +430,14 @@ impl MInst {
             Op::RepMovsb => (vec![RDI, RSI, RCX], vec![RDI, RSI, RCX], false),
             Op::RepStosb => (vec![RDI, RAX, RCX], vec![RDI, RCX], false),
             Op::Call(info) => (info.uses.clone(), info.defs.clone(), true),
+            // control never comes back, so nothing is clobbered for later code
+            Op::TailCall(info) => (info.uses.clone(), Vec::new(), false),
             _ => (Vec::new(), Vec::new(), false),
         }
     }
 
     pub fn is_terminator(&self) -> bool {
-        matches!(self.op, Op::Jmp(_) | Op::Ret | Op::Ud2)
+        matches!(self.op, Op::Jmp(_) | Op::Ret | Op::Ud2 | Op::TailCall(_))
     }
 }
 
