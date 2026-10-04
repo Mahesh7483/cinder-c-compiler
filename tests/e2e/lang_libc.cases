@@ -1,0 +1,567 @@
+//// case: libc_printf_conversions_and_flags
+#include <stdio.h>
+int main(void) {
+    printf("[%d] [%i] [%u] [%o] [%x] [%X] [%c] [%s] [%%]\n", -42, 42, 4000000000u, 64, 255, 255, 'z', "str");
+    printf("[%5d] [%-5d] [%05d] [%+d] [% d] [%+d]\n", 42, 42, 42, 42, 42, -42);
+    printf("[%#x] [%#o] [%#X] [%08.3f] [%-8.2f|] [%+.1f]\n", 255, 8, 255, 3.14159, 2.71828, 1.05);
+    printf("[%10s] [%-10s] [%.3s] [%10.3s]\n", "right", "left", "truncate", "truncate");
+    printf("[%*d] [%-*d] [%.*f] [%*.*f]\n", 6, 42, 6, 42, 2, 3.14159, 9, 3, 2.71828);
+    printf("[%ld] [%lld] [%lu] [%llu] [%zu] [%hd] [%hhd] [%hu]\n", -1L, -1LL, 18446744073709551615UL, 18446744073709551615ULL, (size_t)7, (short)-5, (signed char)-3, (unsigned short)65535);
+    printf("[%e] [%E] [%g] [%G] [%g] [%g]\n", 12345.678, 0.000123, 0.0001, 1e20, 100000.0, 1234567.0);
+    printf("[%f] [%.0f] [%.10f] [%5.1f]\n", 1.0 / 3, 2.5, 1.0 / 3, 99.95);
+    printf("[%c%c%c] [%5c] [%-5c|]\n", 'a', 'b', 'c', 'x', 'y');
+    printf("%s %s\n", "multiple", "args");
+    int n;
+    printf("abc%n\n", &n);
+    printf("%d\n", n);
+    return 0;
+}
+//// stdout
+[-42] [42] [4000000000] [100] [ff] [FF] [z] [str] [%]
+[   42] [42   ] [00042] [+42] [ 42] [-42]
+[0xff] [010] [0XFF] [0003.142] [2.72    |] [+1.1]
+[     right] [left      ] [tru] [       tru]
+[    42] [42    ] [3.14] [    2.718]
+[-1] [-1] [18446744073709551615] [18446744073709551615] [7] [-5] [-3] [65535]
+[1.234568e+04] [1.230000E-04] [0.0001] [1E+20] [100000] [1.23457e+06]
+[0.333333] [2] [0.3333333333] [100.0]
+[abc] [    x] [y    |]
+multiple args
+abc
+3
+//// case: libc_sprintf_snprintf_and_return_values
+#include <stdio.h>
+#include <string.h>
+int main(void) {
+    char buf[32];
+    int n = sprintf(buf, "%d-%s-%.2f", 7, "x", 1.5);
+    printf("%d [%s]\n", n, buf);
+    n = snprintf(buf, sizeof buf, "%s", "a rather long string that does not fit in the buffer at all");
+    printf("%d [%s] %d\n", n, buf, (int)strlen(buf));
+    n = snprintf(buf, 6, "%d", 123456789);
+    printf("%d [%s]\n", n, buf);
+    n = snprintf(NULL, 0, "%05d|%-5s|", 42, "ab");
+    printf("%d\n", n);
+    n = printf("hello\n");
+    printf("%d\n", n);
+    puts("puts adds newline");
+    putchar('c'); putchar('\n');
+    fputs("fputs no newline", stdout);
+    fputc('\n', stdout);
+    return 0;
+}
+//// stdout
+8 [7-x-1.50]
+59 [a rather long string that does ] 31
+9 [12345]
+12
+hello
+6
+puts adds newline
+c
+fputs no newline
+//// case: libc_scanf_family
+#include <stdio.h>
+int main(void) {
+    int a, b;
+    double d;
+    char word[32], c;
+    int n = sscanf("12 34 5.5 hello x", "%d %d %lf %31s %c", &a, &b, &d, word, &c);
+    printf("%d: %d %d %.1f %s %c\n", n, a, b, d, word, c);
+    int hex, oct;
+    n = sscanf("ff 17 -5", "%x %o %d", &hex, &oct, &a);
+    printf("%d: %d %d %d\n", n, hex, oct, a);
+    int pos;
+    n = sscanf("abc 123", "abc %d%n", &a, &pos);
+    printf("%d: %d %d\n", n, a, pos);
+    char first[8], second[8];
+    n = sscanf("one,two", "%7[^,],%7s", first, second);
+    printf("%d: %s %s\n", n, first, second);
+    n = sscanf("nothing", "%d", &a);
+    printf("%d\n", n);
+    long l; unsigned u;
+    n = sscanf("-9000000000 4000000000", "%ld %u", &l, &u);
+    printf("%d: %ld %u\n", n, l, u);
+    return 0;
+}
+//// stdout
+5: 12 34 5.5 hello x
+3: 255 15 -5
+1: 123 7
+2: one two
+0
+2: -9000000000 4000000000
+//// case: libc_stdin_lines_and_words
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+int main(void) {
+    char line[128];
+    int lines = 0, words = 0, chars = 0;
+    while (fgets(line, sizeof line, stdin)) {
+        lines++;
+        chars += (int)strlen(line);
+        int in_word = 0;
+        for (char *p = line; *p; p++) {
+            if (isspace((unsigned char)*p)) in_word = 0;
+            else if (!in_word) { in_word = 1; words++; }
+        }
+    }
+    printf("%d %d %d\n", lines, words, chars);
+    return 0;
+}
+//// stdin
+the quick brown fox
+jumps over  the lazy dog
+
+   leading spaces and a final line without newline
+//// stdout
+4 17 97
+//// case: libc_getchar_and_scanf_ints
+#include <stdio.h>
+int main(void) {
+    int n, sum = 0, count = 0;
+    while (scanf("%d", &n) == 1) { sum += n; count++; }
+    printf("%d numbers, sum %d\n", count, sum);
+    int c;
+    c = getchar();
+    printf("next char after numbers: %d\n", c == EOF ? -1 : c);
+    return 0;
+}
+//// stdin
+10 20 30
+-5 7
+100
+//// stdout
+6 numbers, sum 162
+next char after numbers: -1
+//// case: libc_string_functions
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+int main(void) {
+    char a[32] = "hello";
+    char b[32];
+    strcpy(b, a);
+    strcat(b, ", world");
+    printf("%s %d %d\n", b, (int)strlen(b), strcmp(a, b) < 0);
+    printf("%d %d %d\n", strcmp("abc", "abc"), strcmp("abc", "abd") < 0, strncmp("abcdef", "abcxyz", 3));
+    printf("%s %s %s\n", strchr(b, 'o'), strrchr(b, 'o'), strstr(b, "wor"));
+    printf("%d %d\n", strchr(b, 'q') == NULL, strstr(b, "xyz") == NULL);
+    printf("%d %d %d\n", (int)strspn("aabbcc", "ab"), (int)strcspn("hello world", " "), (int)strlen(strpbrk("find the vowel", "aeiou")));
+    char c[16] = "abc";
+    strncat(c, "defghi", 3);
+    printf("%s\n", c);
+    char d[8];
+    strncpy(d, "toolongstring", 7);
+    d[7] = 0;
+    printf("%s\n", d);
+    char *dup = strdup("duplicate");
+    dup[0] = 'D';
+    printf("%s\n", dup);
+    free(dup);
+    char tok[] = "alpha, beta;gamma  delta";
+    for (char *t = strtok(tok, ",; "); t; t = strtok(NULL, ",; ")) printf("<%s>", t);
+    printf("\n");
+    return 0;
+}
+//// stdout
+hello, world 12 1
+0 1 0
+o, world orld world
+1 1
+4 5 13
+abcdef
+toolong
+Duplicate
+<alpha><beta><gamma><delta>
+//// case: libc_memory_functions
+#include <stdio.h>
+#include <string.h>
+int main(void) {
+    char buf[16];
+    memset(buf, 'x', 15);
+    buf[15] = 0;
+    printf("%s\n", buf);
+    memcpy(buf, "ABCDE", 5);
+    printf("%s\n", buf);
+    memmove(buf + 2, buf, 5);
+    printf("%s\n", buf);
+    printf("%d %d %d\n", memcmp("abc", "abd", 3) < 0, memcmp("abc", "abc", 3), memcmp("b", "a", 1) > 0);
+    printf("%s %d\n", (char *)memchr("find the t", 't', 10), memchr("abc", 'z', 3) == NULL);
+    int a[5] = {1, 2, 3, 4, 5}, b[5];
+    memcpy(b, a, sizeof a);
+    memmove(b + 1, b, 4 * sizeof(int));
+    for (int i = 0; i < 5; i++) printf("%d ", b[i]);
+    printf("\n");
+    struct { int x; double y; } s1 = {1, 2.5}, s2;
+    memcpy(&s2, &s1, sizeof s1);
+    printf("%d %.1f\n", s2.x, s2.y);
+    return 0;
+}
+//// stdout
+xxxxxxxxxxxxxxx
+ABCDExxxxxxxxxx
+ABABCDExxxxxxxx
+1 0 1
+the t 1
+1 1 2 3 4 
+1 2.5
+//// case: libc_ctype
+#include <stdio.h>
+#include <ctype.h>
+int main(void) {
+    const char *s = "Hello, World! 123 \t\n_";
+    int alpha = 0, digit = 0, space = 0, punct = 0, upper = 0, lower = 0, alnum = 0, xd = 0, pr = 0;
+    for (const char *p = s; *p; p++) {
+        unsigned char c = *p;
+        alpha += !!isalpha(c); digit += !!isdigit(c); space += !!isspace(c); punct += !!ispunct(c);
+        upper += !!isupper(c); lower += !!islower(c); alnum += !!isalnum(c); xd += !!isxdigit(c); pr += !!isprint(c);
+    }
+    printf("%d %d %d %d %d %d %d %d %d\n", alpha, digit, space, punct, upper, lower, alnum, xd, pr);
+    char buf[16] = "MiXeD cAsE 42";
+    for (char *p = buf; *p; p++) *p = (char)toupper((unsigned char)*p);
+    printf("%s ", buf);
+    for (char *p = buf; *p; p++) *p = (char)tolower((unsigned char)*p);
+    printf("%s\n", buf);
+    return 0;
+}
+//// stdout
+10 3 5 3 2 8 13 5 19
+MIXED CASE 42 mixed case 42
+//// case: libc_numeric_conversions
+#include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
+int main(void) {
+    printf("%d %ld %lld %.2f\n", atoi("  -123abc"), atol("9000000000"), atoll("-5"), atof("3.75xyz"));
+    char *end;
+    long v = strtol("  0x1F rest", &end, 16);
+    printf("%ld [%s]\n", v, end);
+    printf("%ld %ld %ld\n", strtol("777", NULL, 8), strtol("101", NULL, 2), strtol("zz", NULL, 36));
+    unsigned long u = strtoul("4294967296", &end, 10);
+    printf("%lu %d\n", u, *end == 0);
+    double d = strtod("1.5e3 tail", &end);
+    printf("%.1f [%s]\n", d, end);
+    errno = 0;
+    long big = strtol("99999999999999999999999", NULL, 10);
+    printf("%ld %d\n", big, errno == ERANGE);
+    errno = 0;
+    strtol("abc", &end, 10);
+    printf("%d %d\n", errno, end != NULL);
+    printf("%d %ld %lld\n", abs(-5), labs(-6L), llabs(-7LL));
+    div_t q = div(17, 5);
+    ldiv_t lq = ldiv(-17L, 5L);
+    printf("%d %d %ld %ld\n", q.quot, q.rem, lq.quot, lq.rem);
+    return 0;
+}
+//// stdout
+-123 9000000000 -5 3.75
+31 [ rest]
+511 5 1295
+4294967296 1
+1500.0 [ tail]
+9223372036854775807 1
+0 1
+5 6 7
+3 2 -3 -2
+//// case: libc_malloc_calloc_realloc
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+int main(void) {
+    int *a = malloc(4 * sizeof *a);
+    for (int i = 0; i < 4; i++) a[i] = i * 10;
+    a = realloc(a, 100 * sizeof *a);
+    for (int i = 4; i < 100; i++) a[i] = i * 10;
+    long s = 0;
+    for (int i = 0; i < 100; i++) s += a[i];
+    printf("%ld\n", s);
+    int *z = calloc(50, sizeof *z);
+    int zeros = 0;
+    for (int i = 0; i < 50; i++) zeros += z[i] == 0;
+    printf("%d\n", zeros);
+    char **rows = malloc(5 * sizeof *rows);
+    for (int i = 0; i < 5; i++) {
+        rows[i] = malloc(8);
+        snprintf(rows[i], 8, "row%d", i);
+    }
+    for (int i = 4; i >= 0; i--) printf("%s ", rows[i]);
+    printf("\n");
+    for (int i = 0; i < 5; i++) free(rows[i]);
+    free(rows); free(z); free(a);
+    printf("%d\n", malloc(0) == NULL || 1);
+    return 0;
+}
+//// stdout
+49500
+50
+row4 row3 row2 row1 row0 
+1
+//// case: libc_linked_list_and_tree
+#include <stdio.h>
+#include <stdlib.h>
+struct node { int v; struct node *next; };
+struct tree { int key; struct tree *l, *r; };
+static struct node *push(struct node *h, int v) { struct node *n = malloc(sizeof *n); n->v = v; n->next = h; return n; }
+static struct node *reverse(struct node *h) {
+    struct node *prev = NULL;
+    while (h) { struct node *nx = h->next; h->next = prev; prev = h; h = nx; }
+    return prev;
+}
+static struct tree *insert(struct tree *t, int k) {
+    if (!t) { t = calloc(1, sizeof *t); t->key = k; return t; }
+    if (k < t->key) t->l = insert(t->l, k); else t->r = insert(t->r, k);
+    return t;
+}
+static void inorder(const struct tree *t) { if (!t) return; inorder(t->l); printf("%d ", t->key); inorder(t->r); }
+static int height(const struct tree *t) { if (!t) return 0; int a = height(t->l), b = height(t->r); return 1 + (a > b ? a : b); }
+static void destroy(struct tree *t) { if (!t) return; destroy(t->l); destroy(t->r); free(t); }
+int main(void) {
+    struct node *h = NULL;
+    for (int i = 1; i <= 6; i++) h = push(h, i * i);
+    for (struct node *p = h; p; p = p->next) printf("%d ", p->v);
+    printf("| ");
+    h = reverse(h);
+    for (struct node *p = h; p; ) { printf("%d ", p->v); struct node *nx = p->next; free(p); p = nx; }
+    printf("\n");
+    struct tree *t = NULL;
+    int keys[] = {50, 30, 70, 20, 40, 60, 80, 35, 45, 65};
+    for (int i = 0; i < 10; i++) t = insert(t, keys[i]);
+    inorder(t);
+    printf("| h=%d\n", height(t));
+    destroy(t);
+    return 0;
+}
+//// stdout
+36 25 16 9 4 1 | 1 4 9 16 25 36 
+20 30 35 40 45 50 60 65 70 80 | h=4
+//// case: libc_qsort_and_bsearch
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+struct P { char name[8]; int age; };
+static int cmp_int(const void *a, const void *b) { int x = *(const int *)a, y = *(const int *)b; return (x > y) - (x < y); }
+static int cmp_desc(const void *a, const void *b) { return cmp_int(b, a); }
+static int cmp_str(const void *a, const void *b) { return strcmp(*(const char *const *)a, *(const char *const *)b); }
+static int cmp_age(const void *a, const void *b) { return ((const struct P *)a)->age - ((const struct P *)b)->age; }
+int main(void) {
+    int a[] = {42, 7, 19, -3, 100, 0, 7, 55};
+    qsort(a, 8, sizeof a[0], cmp_int);
+    for (int i = 0; i < 8; i++) printf("%d ", a[i]);
+    printf("\n");
+    qsort(a, 8, sizeof a[0], cmp_desc);
+    for (int i = 0; i < 8; i++) printf("%d ", a[i]);
+    printf("\n");
+    const char *words[] = {"pear", "apple", "fig", "banana", "cherry"};
+    qsort(words, 5, sizeof words[0], cmp_str);
+    for (int i = 0; i < 5; i++) printf("%s ", words[i]);
+    printf("\n");
+    struct P people[] = {{"ann", 31}, {"bob", 25}, {"cy", 40}, {"di", 19}};
+    qsort(people, 4, sizeof people[0], cmp_age);
+    for (int i = 0; i < 4; i++) printf("%s:%d ", people[i].name, people[i].age);
+    printf("\n");
+    qsort(a, 8, sizeof a[0], cmp_int);
+    int key = 55;
+    int *hit = bsearch(&key, a, 8, sizeof a[0], cmp_int);
+    int miss = 56;
+    printf("%d %d\n", hit ? (int)(hit - a) : -1, bsearch(&miss, a, 8, sizeof a[0], cmp_int) == NULL);
+    return 0;
+}
+//// stdout
+-3 0 7 7 19 42 55 100 
+100 55 42 19 7 7 0 -3 
+apple banana cherry fig pear 
+di:19 bob:25 ann:31 cy:40 
+6 1
+//// case: libc_math_functions
+#include <stdio.h>
+#include <math.h>
+int main(void) {
+    printf("%.6f %.6f %.6f\n", sqrt(2.0), cbrt(27.0), pow(2.0, 0.5));
+    printf("%.6f %.6f %.6f %.6f\n", sin(1.0), cos(1.0), tan(1.0), atan2(1.0, 2.0));
+    printf("%.6f %.6f %.6f %.6f\n", exp(1.5), log(10.0), log10(1000.0), log2(8.0));
+    printf("%.1f %.1f %.1f %.1f %.1f\n", floor(-1.5), ceil(-1.5), round(-1.5), trunc(-1.5), fabs(-2.5));
+    printf("%.3f %.3f %.3f\n", fmod(10.5, 3.0), hypot(3.0, 4.0), fmax(1.0, 2.0) + fmin(1.0, 2.0));
+    printf("%.6f %.6f %.6f\n", asin(0.5), acos(0.5), atan(1.0) * 4);
+    printf("%.4f %.4f %.4f\n", sinh(1.0), cosh(1.0), tanh(1.0));
+    printf("%d %d %d\n", isnan(NAN), isinf(INFINITY), isfinite(1.0));
+    printf("%.5f %.5f\n", M_PI, M_E);
+    printf("%.2f %.2f\n", sqrtf(9.0f), powf(2.0f, 10.0f));
+    printf("%ld %ld\n", lround(2.5), lround(-2.5));
+    return 0;
+}
+//// stdout
+1.414214 3.000000 1.414214
+0.841471 0.540302 1.557408 0.463648
+4.481689 2.302585 3.000000 3.000000
+-2.0 -1.0 -2.0 -1.0 2.5
+1.500 5.000 3.000
+0.523599 1.047198 3.141593
+1.1752 1.5431 0.7616
+1 1 1
+3.14159 2.71828
+3.00 1024.00
+3 -3
+//// case: libc_limits_and_stdint
+#include <stdio.h>
+#include <limits.h>
+#include <stdint.h>
+#include <inttypes.h>
+#include <float.h>
+#include <stddef.h>
+int main(void) {
+    printf("%d %d %u\n", INT_MIN, INT_MAX, UINT_MAX);
+    printf("%ld %ld %lu\n", LONG_MIN, LONG_MAX, ULONG_MAX);
+    printf("%d %d %d %d\n", CHAR_BIT, SCHAR_MIN, SCHAR_MAX, UCHAR_MAX);
+    printf("%d %d %d %d\n", SHRT_MIN, SHRT_MAX, USHRT_MAX, CHAR_MIN);
+    printf("%lld %lld\n", LLONG_MIN, LLONG_MAX);
+    printf("%d %d %d %d\n", INT8_MIN, INT16_MAX, (int)sizeof(int32_t), (int)sizeof(uint64_t));
+    printf("%" PRId64 " %" PRIu64 " %" PRIx32 " %" PRId8 "\n", INT64_MIN, UINT64_MAX, 0xdeadbeefu, (int8_t)-5);
+    printf("%d %d %d\n", (int)sizeof(size_t), (int)sizeof(ptrdiff_t), (int)sizeof(intptr_t));
+    printf("%" PRIu64 " %zu\n", (uint64_t)SIZE_MAX, (size_t)-1);
+    printf("%.3e %.3e %d %d\n", DBL_EPSILON, FLT_MAX, DBL_DIG, FLT_DIG);
+    printf("%.5g %.5g\n", DBL_MIN, FLT_EPSILON);
+    return 0;
+}
+//// stdout
+-2147483648 2147483647 4294967295
+-9223372036854775808 9223372036854775807 18446744073709551615
+8 -128 127 255
+-32768 32767 65535 -128
+-9223372036854775808 9223372036854775807
+-128 32767 4 8
+-9223372036854775808 18446744073709551615 deadbeef -5
+8 8 8
+18446744073709551615 18446744073709551615
+2.220e-16 3.403e+38 15 6
+2.2251e-308 1.1921e-07
+//// case: libc_file_io_tmpfile
+#include <stdio.h>
+#include <string.h>
+int main(void) {
+    FILE *f = tmpfile();
+    for (int i = 0; i < 5; i++) fprintf(f, "line %d: %s\n", i, i % 2 ? "odd" : "even");
+    rewind(f);
+    char buf[64];
+    while (fgets(buf, sizeof buf, f)) fputs(buf, stdout);
+    long pos = ftell(f);
+    fseek(f, 7, SEEK_SET);
+    int c = fgetc(f);
+    ungetc(c, f);
+    printf("%ld %c %c\n", pos, c, fgetc(f));
+    fseek(f, 0, SEEK_END);
+    printf("%ld\n", ftell(f));
+    rewind(f);
+    unsigned char bytes[10];
+    size_t n = fread(bytes, 1, sizeof bytes, f);
+    printf("%d %d %d\n", (int)n, bytes[0], bytes[5]);
+    fclose(f);
+    f = tmpfile();
+    int vals[4] = {10, 20, 30, 40};
+    fwrite(vals, sizeof vals[0], 4, f);
+    rewind(f);
+    int back[4];
+    int got = (int)fread(back, sizeof back[0], 4, f);
+    int at_eof = feof(f);
+    printf("%d %d %d\n", got, back[2], at_eof);
+    fclose(f);
+    return 0;
+}
+//// stdout
+line 0: even
+line 1: odd
+line 2: even
+line 3: odd
+line 4: even
+63    
+63
+10 108 48
+4 30 0
+//// case: libc_variadic_wrappers_vprintf
+#include <stdio.h>
+#include <stdarg.h>
+static int log_msg(const char *level, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    printf("[%s] ", level);
+    int n = vprintf(fmt, ap);
+    va_end(ap);
+    printf("\n");
+    return n;
+}
+static void to_buf(char *buf, size_t n, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, n, fmt, ap);
+    va_end(ap);
+}
+int main(void) {
+    int n = log_msg("info", "value=%d name=%s pi=%.2f", 42, "x", 3.14159);
+    log_msg("warn", "no args");
+    char b[40];
+    to_buf(b, sizeof b, "%s-%d-%c", "abc", 9, 'q');
+    printf("%d %s\n", n, b);
+    return 0;
+}
+//// stdout
+[info] value=42 name=x pi=3.14
+[warn] no args
+23 abc-9-q
+//// case: libc_rand_srand_deterministic
+#include <stdio.h>
+#include <stdlib.h>
+int main(void) {
+    srand(42);
+    int a = rand(), b = rand(), c = rand();
+    srand(42);
+    int a2 = rand(), b2 = rand(), c2 = rand();
+    printf("%d %d %d\n", a2 == a, b2 == b, c2 == c);
+    srand(1);
+    int hist[4] = {0};
+    for (int i = 0; i < 1000; i++) hist[rand() % 4]++;
+    printf("%d\n", hist[0] + hist[1] + hist[2] + hist[3]);
+    printf("%d\n", RAND_MAX >= 32767);
+    return 0;
+}
+//// stdout
+1 1 1
+1000
+1
+//// case: libc_exit_atexit_and_abort_free_paths
+#include <stdio.h>
+#include <stdlib.h>
+static void first(void) { printf("first registered, runs last\n"); }
+static void second(void) { printf("second registered, runs first\n"); }
+int main(void) {
+    atexit(first);
+    atexit(second);
+    printf("in main\n");
+    if (getenv("CINDER_SURELY_UNSET_VARIABLE") == NULL) exit(3);
+    return 0;
+}
+//// exit: 3
+//// stdout
+in main
+second registered, runs first
+first registered, runs last
+//// case: libc_assert_and_noreturn_headers
+#include <stdio.h>
+#include <assert.h>
+#include <stdnoreturn.h>
+#include <iso646.h>
+#include <stdlib.h>
+static noreturn void fail(int code) { exit(code); }
+int main(void) {
+    int x = 5;
+    assert(x == 5);
+    assert(x > 0 and x < 10);
+    printf("%d %d %d\n", x bitand 4, x bitor 2, x xor 1);
+    printf("%d\n", not (x == 5));
+    if (x > 3) fail(9);
+    return 0;
+}
+//// exit: 9
+//// stdout
+4 7 4
+0
