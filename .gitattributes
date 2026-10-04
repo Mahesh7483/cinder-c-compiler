@@ -1,0 +1,4 @@
+# Test fixtures contain exact byte expectations; never rewrite line endings.
+* text=auto eol=lf
+*.png binary
+*.ico binary

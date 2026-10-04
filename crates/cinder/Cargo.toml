@@ -1,0 +1,17 @@
+[package]
+name = "cinder"
+description = "A from-scratch C11 compiler for x86-64 Linux"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "cinder"
+path = "src/lib.rs"
+
+[[bin]]
+name = "cinder"
+path = "src/main.rs"
+
+[dependencies]
