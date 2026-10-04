@@ -1,0 +1,57 @@
+# Render Blueprint for the Cinder playground (compiler + API + web UI in one Docker service).
+#
+#   Dashboard -> New -> Blueprint -> pick this repository -> Apply
+#
+# Step-by-step instructions, the sandbox explanation and troubleshooting: docs/DEPLOY.md
+# Every environment variable is documented in crates/cinder-server/src/config.rs.
+
+services:
+  - type: web
+    name: cinder-playground
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free # 512 MB RAM, ~0.1 CPU, sleeps after 15 min idle; use `starter` for a snappier playground
+    region: oregon
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      # PORT is provided by Render (10000) and read by the server: do not set it here.
+
+      # --- sandbox for user programs ---------------------------------------------------------
+      # `require`: programs only run when the full sandbox (chroot + unprivileged uid + seccomp +
+      # rlimits) passes the server's start-up self-test; otherwise running is disabled (the
+      # compiler views keep working) and /api/health says why. Never set `off` on a public server.
+      - key: SANDBOX
+        value: require
+
+      # --- per-program limits ----------------------------------------------------------------
+      - key: RUN_CPU_SECS # CPU time (RLIMIT_CPU); an infinite loop dies with SIGXCPU
+        value: "2"
+      - key: RUN_WALL_SECS # wall clock; generous because the free plan gives a fraction of a core
+        value: "10"
+      - key: RUN_MEMORY_MB # address space of each process (RLIMIT_AS) and resident memory of all of them together
+        value: "128"
+      - key: COMPILE_MEMORY_MB # resident memory of one compile (compiler + assembler + linker)
+        value: "160"
+      - key: RUN_PROCESSES # fork bombs hit this (RLIMIT_NPROC, per sandbox uid)
+        value: "16"
+      - key: OUTPUT_LIMIT_BYTES # stdout and stderr are each truncated here
+        value: "65536"
+
+      # --- load and abuse limits -------------------------------------------------------------
+      - key: MAX_CONCURRENT # simultaneous compiles + runs: 2 x 160 MB worst case fits the 512 MB free plan
+        value: "2"
+      - key: RATE_RUN_PER_MIN # per client IP
+        value: "20"
+      - key: RATE_COMPILE_PER_MIN # per client IP
+        value: "60"
+
+      # --- client address for rate limiting --------------------------------------------------
+      # Render's edge is Cloudflare, which overwrites CF-Connecting-IP on every request. If the
+      # header is missing the server falls back to X-Forwarded-For (TRUST_PROXY_HOPS entries from
+      # the right) and then to the socket address.
+      - key: CLIENT_IP_HEADER
+        value: CF-Connecting-IP
+      - key: TRUST_PROXY_HOPS
+        value: "1"

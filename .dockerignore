@@ -1,0 +1,9 @@
+target
+.git
+.github
+.claude
+docs
+tests
+scripts
+*.md
+**/*.expected
