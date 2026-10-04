@@ -36,6 +36,8 @@ struct Server {
     port: u16,
     state: Arc<AppState>,
     _web: PathBuf,
+    /// numeric uid of sandbox slot 0 (slots are `uid_base .. uid_base + MAX_CONCURRENT`)
+    uid_base: u32,
 }
 
 static NEXT_SERVER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
@@ -50,7 +52,8 @@ async fn start(extra: &[(&str, &str)]) -> Server {
     let mut vars: HashMap<String, String> = HashMap::new();
     vars.insert("CINDER_BIN".into(), cinder_bin().to_string_lossy().into());
     vars.insert("WEB_DIR".into(), web.to_string_lossy().into());
-    vars.insert("RUN_UID_BASE".into(), (30000 + n * 64).to_string());
+    let uid_base = 30000 + n * 64;
+    vars.insert("RUN_UID_BASE".into(), uid_base.to_string());
     vars.insert("RUN_CPU_SECS".into(), "1".into());
     vars.insert("RUN_WALL_SECS".into(), "3".into());
     vars.insert("RATE_RUN_PER_MIN".into(), "6000".into());
@@ -68,7 +71,7 @@ async fn start(extra: &[(&str, &str)]) -> Server {
     tokio::spawn(async move {
         axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await.unwrap();
     });
-    Server { port, state, _web: web }
+    Server { port, state, _web: web, uid_base }
 }
 
 struct Reply {
@@ -478,6 +481,63 @@ int main(void) {
     // the server is still fine and nothing is left running
     let again = s.run(HELLO, "").await;
     assert_eq!(again["stdout"], "hello\n");
+}
+
+/// Live (non-zombie) processes whose real uid is in `lo..hi` (read from /proc).
+fn processes_with_uid_in(lo: u32, hi: u32) -> Vec<u32> {
+    let mut found = Vec::new();
+    for e in std::fs::read_dir("/proc").unwrap().flatten() {
+        let Ok(pid) = e.file_name().to_string_lossy().parse::<u32>() else { continue };
+        let Ok(status) = std::fs::read_to_string(format!("/proc/{pid}/status")) else { continue };
+        // a killed process nobody has reaped yet (zombie) is dead; only living ones count
+        if status.lines().any(|l| l.starts_with("State:") && l.contains('Z')) {
+            continue;
+        }
+        let uid = status
+            .lines()
+            .find_map(|l| l.strip_prefix("Uid:"))
+            .and_then(|r| r.split_whitespace().next().and_then(|u| u.parse::<u32>().ok()));
+        if uid.is_some_and(|u| (lo..hi).contains(&u)) {
+            found.push(pid);
+        }
+    }
+    found
+}
+
+#[tokio::test]
+async fn a_descendant_that_leaves_the_process_group_does_not_outlive_the_job() {
+    let s = start(&[("RUN_WALL_SECS", "5")]).await;
+    // the child starts a session of its own (so killing the program's process group cannot reach it),
+    // tells the parent, and sleeps; the parent then exits normally
+    let code = r#"
+#include <stdio.h>
+#include <unistd.h>
+int pipe(int *fds);
+int fork(void);
+int setsid(void);
+int main(void) {
+    int fds[2];
+    char c;
+    if (pipe(fds) != 0) return 2;
+    if (fork() == 0) {
+        setsid();
+        write(fds[1], "x", 1);
+        for (;;) sleep(1);
+    }
+    if (read(fds[0], &c, 1) != 1) return 3;
+    puts("parent done");
+    return 0;
+}
+"#;
+    let v = s.run(code, "").await;
+    assert_eq!(v["stdout"], "parent done\n", "{v}");
+    if s.own_uid() {
+        assert_eq!(
+            processes_with_uid_in(s.uid_base, s.uid_base + 64),
+            Vec::<u32>::new(),
+            "a process of the finished job is still running"
+        );
+    }
 }
 
 #[tokio::test]

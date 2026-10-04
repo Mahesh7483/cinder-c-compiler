@@ -345,6 +345,25 @@ fn kill_group(pid: u32) {
     }
 }
 
+/// Kill every process owned by numeric `uid`, including ones that left the job's process group with
+/// `setsid()` / `setpgid()` and would survive `kill_group`. Only meaningful for a per-slot sandbox uid,
+/// which belongs to exactly one job at a time. Implemented by running `/bin/true` as that uid and
+/// calling `kill(-1, SIGKILL)` in the child (the caller itself is never a target of `kill(-1)`).
+async fn kill_uid(uid: u32) {
+    let mut cmd = Command::new("/bin/true");
+    cmd.uid(uid).gid(uid).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    // SAFETY: the closure only calls the async-signal-safe kill(2).
+    unsafe {
+        cmd.pre_exec(|| {
+            libc::kill(-1, libc::SIGKILL);
+            Ok(())
+        });
+    }
+    if let Ok(mut child) = cmd.spawn() {
+        let _ = tokio::time::timeout(Duration::from_secs(2), child.wait()).await;
+    }
+}
+
 /// Resident memory in bytes, summed over every process in process group `pgid` (from `/proc`).
 pub fn group_rss(pgid: u32) -> u64 {
     // SAFETY: sysconf has no preconditions.
@@ -473,8 +492,12 @@ pub async fn run(
             child.wait().await?
         }
     };
-    // nothing the program started may outlive it (or keep the pipes open)
+    // nothing the program started may outlive it (or keep the pipes open) -- not even a descendant
+    // that moved to a session of its own
     kill_group(pid);
+    if let Some(uid) = iso.uid {
+        kill_uid(uid).await;
+    }
     let time_ms = start.elapsed().as_millis() as u64;
     let join = |t: tokio::task::JoinHandle<Vec<u8>>| async move {
         tokio::time::timeout(Duration::from_secs(1), t).await.ok().and_then(|r| r.ok()).unwrap_or_default()

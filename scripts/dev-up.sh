@@ -20,7 +20,10 @@ if docker ps -a --format '{{.Names}}' | grep -qx "$NAME"; then
 fi
 docker volume create cinder-target >/dev/null
 docker volume create cinder-cargo >/dev/null
-docker run -d --name "$NAME" \
+# --init: a real PID 1 that reaps orphans. The server tests run hostile programs (fork bombs, setsid
+# escapes); their killed children are reparented to PID 1 and, if nobody reaps them, stay zombies that
+# keep counting against their uid's process limit and make later test runs fail with EAGAIN.
+docker run -d --init --name "$NAME" \
   -v "$ROOT:/work" \
   -v cinder-target:/target \
   -v cinder-cargo:/usr/local/cargo/registry \
