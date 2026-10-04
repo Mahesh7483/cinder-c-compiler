@@ -1,9 +1,7 @@
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.iter().any(|a| a == "--version") {
-        println!("cinder {}", cinder::VERSION);
-        return;
-    }
-    eprintln!("cinder: error: no input files");
-    std::process::exit(1);
+    let stdout = std::io::stdout();
+    let stderr = std::io::stderr();
+    let code = cinder::driver::run(&args, &mut stdout.lock(), &mut stderr.lock());
+    std::process::exit(code);
 }

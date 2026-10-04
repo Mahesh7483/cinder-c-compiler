@@ -4,7 +4,13 @@
 //! mirrors it.
 
 pub mod diag;
+pub mod driver;
+pub mod headers;
 pub mod intern;
+pub mod lex;
+pub mod literal;
+pub mod options;
+pub mod pp;
 pub mod session;
 pub mod source;
 

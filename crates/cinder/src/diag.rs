@@ -70,6 +70,7 @@ warn_table! {
     ReturnStackAddress,          "return-stack-address", Default;
     UnknownEscape,               "unknown-escape-sequence", Default;
     Multichar,                   "multichar", Default;
+    PpWarnings,                  "#warnings", Default;
     UnusedVariable,              "unused-variable", All;
     UnusedFunction,              "unused-function", All;
     UnusedValue,                 "unused-value", All;
