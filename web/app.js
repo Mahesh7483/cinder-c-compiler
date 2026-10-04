@@ -412,6 +412,7 @@ function renderRun(r) {
   const meta = (cls, text) => { const m = span('out-meta ' + cls, text); out.append(m); };
   if (r.truncated) meta('bad', 'Output truncated: the program printed more than the limit allows and was stopped.');
   if (r.timedOut) meta('bad', 'Time limit exceeded: the program was stopped.');
+  if (r.memoryExceeded) meta('bad', 'Memory limit exceeded: the program (with everything it started) was stopped.');
   if (r.signal) {
     meta('bad', `Terminated by ${r.signal}: ${SIGNAL_TEXT[r.signal] || 'signal'}`);
   } else if (r.exitCode !== null && r.exitCode !== undefined) {

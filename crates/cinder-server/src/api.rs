@@ -121,7 +121,15 @@ impl IntoResponse for ApiError {
     }
 }
 
-fn client_ip(headers: &HeaderMap, peer: SocketAddr, trusted_hops: usize) -> IpAddr {
+/// The address rate limits are keyed on. `ip_header` (e.g. `cf-connecting-ip`) names a header the
+/// edge proxy *overwrites* on every request; otherwise the `X-Forwarded-For` entry `trusted_hops`
+/// from the right is used, and without proxies the socket peer.
+fn client_ip(headers: &HeaderMap, peer: SocketAddr, trusted_hops: usize, ip_header: Option<&str>) -> IpAddr {
+    if let Some(ip) =
+        ip_header.and_then(|h| headers.get(h)).and_then(|v| v.to_str().ok()).and_then(|v| v.trim().parse().ok())
+    {
+        return ip;
+    }
     if trusted_hops > 0 {
         if let Some(v) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
             // the proxy appends the address it saw: count from the right, never trust the left
@@ -209,6 +217,7 @@ fn compile_limits(cfg: &Config) -> Limits {
         cpu_secs: cfg.compile_secs,
         mem_bytes: 3 << 30,
         processes: if sandbox::is_root() { Some(64) } else { None },
+        group_rss: Some(cfg.compile_mem_mb << 20),
         files: 256,
         fsize: 64 << 20,
         wall: Duration::from_secs(cfg.compile_secs),
@@ -297,7 +306,11 @@ pub async fn compile(
 ) -> Result<Json<CompileResp>, ApiError> {
     let req = body(req)?;
     check_code(&st.cfg, &req.code)?;
-    rate_limit(&st, client_ip(&headers, peer, st.cfg.trust_proxy_hops), Kind::Compile)?;
+    rate_limit(
+        &st,
+        client_ip(&headers, peer, st.cfg.trust_proxy_hops, st.cfg.client_ip_header.as_deref()),
+        Kind::Compile,
+    )?;
     let emit_flags: &[&str] = match req.emit.as_str() {
         "asm" => &["-S", "-o", "-"],
         "ir" => &["--emit-ir-lines"],
@@ -332,6 +345,9 @@ pub async fn compile(
     }
     if out.timed_out {
         rest.push_str("the compiler took too long and was stopped\n");
+    }
+    if out.memory_exceeded {
+        rest.push_str(&format!("the compiler used more than {} MB of memory and was stopped\n", st.cfg.compile_mem_mb));
     }
     let raw = String::from_utf8_lossy(&out.stdout).into_owned();
     let (text, line_map) = match req.emit.as_str() {
@@ -377,6 +393,8 @@ pub struct RunResp {
     exit_code: Option<i32>,
     signal: Option<String>,
     timed_out: bool,
+    /// the processes of the program together used more resident memory than allowed
+    memory_exceeded: bool,
     truncated: bool,
     time_ms: u64,
     compile_ms: u64,
@@ -389,6 +407,7 @@ fn run_limits(cfg: &Config, mode: &RunMode) -> Limits {
         mem_bytes: cfg.run_mem_mb << 20,
         // the limit is per uid: only meaningful when programs run as their own uid
         processes: if matches!(mode, RunMode::Full | RunMode::UidOnly) { Some(cfg.run_processes) } else { None },
+        group_rss: Some(cfg.run_mem_mb << 20),
         files: 32,
         fsize: 1 << 20,
         wall: Duration::from_secs(cfg.run_wall_secs),
@@ -417,7 +436,7 @@ pub async fn run(
             format!("running programs is disabled on this server: {}", why),
         ));
     }
-    rate_limit(&st, client_ip(&headers, peer, st.cfg.trust_proxy_hops), Kind::Run)?;
+    rate_limit(&st, client_ip(&headers, peer, st.cfg.trust_proxy_hops, st.cfg.client_ip_header.as_deref()), Kind::Run)?;
     let slot = st.slot().await?;
     let dir = new_dir(&st, &slot, &req.code)?;
 
@@ -434,6 +453,10 @@ pub async fn run(
     if out.timed_out {
         compile_rest.push_str("the compiler took too long and was stopped\n");
     }
+    if out.memory_exceeded {
+        compile_rest
+            .push_str(&format!("the compiler used more than {} MB of memory and was stopped\n", st.cfg.compile_mem_mb));
+    }
     let prog = dir.path().join("prog");
     if out.exit_code != Some(0) || !prog.is_file() {
         return Ok(Json(RunResp {
@@ -446,6 +469,7 @@ pub async fn run(
             exit_code: None,
             signal: None,
             timed_out: false,
+            memory_exceeded: false,
             truncated: false,
             time_ms: 0,
             compile_ms: out.time_ms,
@@ -470,6 +494,7 @@ pub async fn run(
         exit_code: ran.exit_code,
         signal: ran.signal.map(sandbox::signal_name),
         timed_out: ran.timed_out,
+        memory_exceeded: ran.memory_exceeded,
         truncated: ran.truncated,
         time_ms: ran.time_ms,
         compile_ms: out.time_ms,
@@ -577,4 +602,37 @@ async fn self_test(st: &Arc<AppState>) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn headers(pairs: &[(&str, &str)]) -> HeaderMap {
+        let mut h = HeaderMap::new();
+        for (k, v) in pairs {
+            h.insert(header::HeaderName::from_bytes(k.as_bytes()).unwrap(), v.parse().unwrap());
+        }
+        h
+    }
+
+    #[test]
+    fn client_address_sources() {
+        let peer: SocketAddr = "10.0.0.9:1234".parse().unwrap();
+        let ip = |s: &str| s.parse::<IpAddr>().unwrap();
+        // no proxy headers: the socket peer
+        assert_eq!(client_ip(&headers(&[]), peer, 1, None), ip("10.0.0.9"));
+        // X-Forwarded-For is counted from the right; a client-supplied left entry is ignored
+        let xff = headers(&[("x-forwarded-for", "6.6.6.6, 203.0.113.7")]);
+        assert_eq!(client_ip(&xff, peer, 1, None), ip("203.0.113.7"));
+        assert_eq!(client_ip(&xff, peer, 2, None), ip("6.6.6.6"));
+        assert_eq!(client_ip(&xff, peer, 0, None), ip("10.0.0.9"));
+        assert_eq!(client_ip(&xff, peer, 5, None), ip("10.0.0.9"));
+        // a dedicated edge header wins when present and valid, otherwise the other rules apply
+        let both = headers(&[("x-forwarded-for", "6.6.6.6, 172.70.0.1"), ("cf-connecting-ip", "198.51.100.4")]);
+        assert_eq!(client_ip(&both, peer, 1, Some("cf-connecting-ip")), ip("198.51.100.4"));
+        assert_eq!(client_ip(&both, peer, 1, Some("true-client-ip")), ip("172.70.0.1"));
+        let junk = headers(&[("cf-connecting-ip", "not an address")]);
+        assert_eq!(client_ip(&junk, peer, 1, Some("cf-connecting-ip")), ip("10.0.0.9"));
+    }
 }

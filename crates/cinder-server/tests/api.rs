@@ -344,6 +344,38 @@ async fn memory_is_limited() {
 }
 
 #[tokio::test]
+async fn memory_is_limited_across_all_processes_of_a_program() {
+    // every child stays below the per-process limit, but together they hold ~10x the allowed memory
+    let s = start(&[("RUN_MEMORY_MB", "64"), ("RUN_PROCESSES", "16"), ("RUN_WALL_SECS", "10")]).await;
+    let code = r#"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+int fork(void);
+unsigned sleep(unsigned);
+int main(void) {
+    for (int i = 0; i < 12; i++) {
+        if (fork() == 0) {
+            char *p = malloc(50u << 20);
+            if (p) memset(p, 1, 50u << 20);
+            sleep(30);
+            return 0;
+        }
+    }
+    sleep(30);
+    puts("survived");
+    return 0;
+}
+"#;
+    let t0 = std::time::Instant::now();
+    let v = s.run(code, "").await;
+    assert!(t0.elapsed().as_secs() < 8, "the watchdog acts within a fraction of a second: {v}");
+    assert_eq!(v["memoryExceeded"], true, "{v}");
+    assert_eq!(v["ok"], false, "{v}");
+    assert_eq!(v["stdout"], "", "{v}");
+}
+
+#[tokio::test]
 async fn output_is_capped_and_the_program_stopped() {
     let s = start(&[("OUTPUT_LIMIT_BYTES", "2048"), ("RUN_WALL_SECS", "10")]).await;
     let t0 = std::time::Instant::now();

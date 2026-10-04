@@ -10,9 +10,10 @@
 //! | `MAX_CONCURRENT` | 4 | simultaneous compiles + runs |
 //! | `QUEUE_WAIT_SECS` | 8 | how long a request waits for a free slot before a 503 |
 //! | `COMPILE_TIMEOUT_SECS` | 10 | wall-clock limit for one compile (CPU limit is the same) |
+//! | `COMPILE_MEMORY_MB` | 256 | resident-memory ceiling of one compile (compiler, assembler and linker together) |
 //! | `RUN_CPU_SECS` | 2 | CPU-time limit of a program |
 //! | `RUN_WALL_SECS` | 5 | wall-clock limit of a program |
-//! | `RUN_MEMORY_MB` | 128 | address-space limit of a program |
+//! | `RUN_MEMORY_MB` | 128 | address-space limit of each process of a program, and ceiling for the resident memory of all of them together |
 //! | `RUN_PROCESSES` | 16 | process/thread limit of a program |
 //! | `OUTPUT_LIMIT_BYTES` | 65536 | stdout and stderr cap (each) |
 //! | `MAX_CODE_BYTES` | 65536 | largest accepted source |
@@ -21,6 +22,7 @@
 //! | `RATE_COMPILE_PER_MIN` | 60 | `/api/compile` requests per client per minute (burst 10) |
 //! | `SANDBOX` | auto | `auto`, `require` (refuse to run code without the full sandbox) or `off` (dangerous; local development only) |
 //! | `RUN_UID_BASE` | 20000 | numeric uid of slot 0; slot *n* uses `base + n` |
+//! | `CLIENT_IP_HEADER` | unset | a header the edge proxy overwrites with the real client address (`CF-Connecting-IP` behind Cloudflare); wins over `X-Forwarded-For` when present |
 //! | `TRUST_PROXY_HOPS` | 1 | reverse proxies in front of the server: the client address is the *n*-th entry from the right of `X-Forwarded-For` (0 ignores the header) |
 
 use std::path::PathBuf;
@@ -45,6 +47,7 @@ pub struct Config {
     pub max_concurrent: usize,
     pub queue_wait_secs: u64,
     pub compile_secs: u64,
+    pub compile_mem_mb: u64,
     pub run_cpu_secs: u64,
     pub run_wall_secs: u64,
     pub run_mem_mb: u64,
@@ -57,6 +60,7 @@ pub struct Config {
     pub sandbox: SandboxMode,
     pub uid_base: u32,
     pub trust_proxy_hops: usize,
+    pub client_ip_header: Option<String>,
 }
 
 fn get<T: std::str::FromStr>(vars: &dyn Fn(&str) -> Option<String>, key: &str, default: T) -> T {
@@ -93,6 +97,7 @@ impl Config {
             max_concurrent: get::<usize>(vars, "MAX_CONCURRENT", 4).clamp(1, 64),
             queue_wait_secs: get(vars, "QUEUE_WAIT_SECS", 8),
             compile_secs: get(vars, "COMPILE_TIMEOUT_SECS", 10),
+            compile_mem_mb: get(vars, "COMPILE_MEMORY_MB", 256),
             run_cpu_secs: get(vars, "RUN_CPU_SECS", 2),
             run_wall_secs: get(vars, "RUN_WALL_SECS", 5),
             run_mem_mb: get(vars, "RUN_MEMORY_MB", 128),
@@ -105,6 +110,7 @@ impl Config {
             sandbox,
             uid_base: get(vars, "RUN_UID_BASE", 20000),
             trust_proxy_hops: get(vars, "TRUST_PROXY_HOPS", 1),
+            client_ip_header: vars("CLIENT_IP_HEADER").map(|h| h.trim().to_ascii_lowercase()).filter(|h| !h.is_empty()),
         }
     }
 }
@@ -125,6 +131,12 @@ mod tests {
         assert_eq!((c.port, c.max_concurrent, c.run_cpu_secs, c.run_mem_mb), (8080, 4, 2, 128));
         assert_eq!(c.sandbox, SandboxMode::Auto);
         assert_eq!(c.output_limit, 65536);
+        assert_eq!(c.client_ip_header, None);
+        assert_eq!(
+            cfg(&[("CLIENT_IP_HEADER", " CF-Connecting-IP ")]).client_ip_header.as_deref(),
+            Some("cf-connecting-ip")
+        );
+        assert_eq!(cfg(&[("CLIENT_IP_HEADER", "  ")]).client_ip_header, None);
     }
 
     #[test]

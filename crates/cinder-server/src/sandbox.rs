@@ -44,6 +44,9 @@ pub struct Limits {
     pub mem_bytes: u64,
     /// `None` leaves the process limit alone (an unprivileged server shares its uid with the program).
     pub processes: Option<u64>,
+    /// Ceiling for the resident memory of *all* processes of the job together. `RLIMIT_AS` is
+    /// per process, so on its own a fork bomb could still hold `processes x mem_bytes`.
+    pub group_rss: Option<u64>,
     pub files: u64,
     pub fsize: u64,
     pub wall: Duration,
@@ -67,6 +70,8 @@ pub struct Outcome {
     pub exit_code: Option<i32>,
     pub signal: Option<i32>,
     pub timed_out: bool,
+    /// Killed because the job's processes together exceeded `Limits::group_rss`.
+    pub memory_exceeded: bool,
     pub truncated: bool,
     pub time_ms: u64,
 }
@@ -340,6 +345,47 @@ fn kill_group(pid: u32) {
     }
 }
 
+/// Resident memory in bytes, summed over every process in process group `pgid` (from `/proc`).
+pub fn group_rss(pgid: u32) -> u64 {
+    // SAFETY: sysconf has no preconditions.
+    let page = unsafe { libc::sysconf(libc::_SC_PAGESIZE) }.max(4096) as u64;
+    let Ok(dir) = std::fs::read_dir("/proc") else { return 0 };
+    let mut total = 0;
+    for entry in dir.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str().filter(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit())) else {
+            continue;
+        };
+        let Ok(stat) = std::fs::read_to_string(format!("/proc/{name}/stat")) else { continue };
+        total += rss_in_group(&stat, pgid, page);
+    }
+    total
+}
+
+/// `/proc/<pid>/stat` is `pid (comm) state ppid pgrp ... rss ...`; `comm` may contain spaces and
+/// parentheses, so fields are counted from the last `)`: pgrp is the 3rd and rss the 22nd after it.
+fn rss_in_group(stat: &str, pgid: u32, page: u64) -> u64 {
+    let Some(rest) = stat.rfind(')').map(|i| &stat[i + 1..]) else { return 0 };
+    let f: Vec<&str> = rest.split_whitespace().collect();
+    if f.len() > 21 && f[2].parse() == Ok(pgid) {
+        f[21].parse::<u64>().unwrap_or(0) * page
+    } else {
+        0
+    }
+}
+
+/// Completes when the group's resident memory exceeds `cap` (never, without a cap).
+async fn memory_watch(pgid: u32, cap: Option<u64>) {
+    let Some(cap) = cap.filter(|_| pgid != 0) else { return std::future::pending().await };
+    let mut tick = tokio::time::interval(Duration::from_millis(40));
+    loop {
+        tick.tick().await;
+        if group_rss(pgid) > cap {
+            return;
+        }
+    }
+}
+
 /// Run `program` with `args`, feeding `stdin`, under `limits` and `iso`.
 pub async fn run(
     program: &Path,
@@ -413,10 +459,12 @@ pub async fn run(
     let err_task = tokio::spawn(drain(stderr, limits.output_cap, over.clone(), flag.clone()));
 
     let mut timed_out = false;
+    let mut memory_exceeded = false;
     let status = tokio::select! {
         r = child.wait() => Some(r?),
         _ = tokio::time::sleep(limits.wall) => { timed_out = true; None }
         _ = over.notified() => None,
+        _ = memory_watch(pid, limits.group_rss) => { memory_exceeded = true; None }
     };
     let status = match status {
         Some(s) => s,
@@ -440,6 +488,7 @@ pub async fn run(
         exit_code: status.code(),
         signal: status.signal(),
         timed_out,
+        memory_exceeded,
         truncated: flag.load(Ordering::SeqCst),
         time_ms,
     })
@@ -468,6 +517,25 @@ pub fn signal_name(sig: i32) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stat_parsing_survives_odd_process_names() {
+        // `comm` is "a) b (c" -- spaces and parentheses must not shift the fields
+        let stat = "123 (a) b (c) S 1 777 123 0 -1 4194560 100 0 0 0 1 1 0 0 20 0 1 0 5000 1000000 250 18446744073709551615 0 0";
+        assert_eq!(rss_in_group(stat, 777, 4096), 250 * 4096);
+        assert_eq!(rss_in_group(stat, 778, 4096), 0);
+        assert_eq!(rss_in_group("garbage", 1, 4096), 0);
+        assert_eq!(rss_in_group("1 (x) S 1", 1, 4096), 0);
+    }
+
+    #[test]
+    fn the_current_process_group_has_resident_memory() {
+        // SAFETY: getpgrp has no preconditions.
+        let pgrp = unsafe { libc::getpgrp() } as u32;
+        if std::path::Path::new("/proc/self/stat").exists() {
+            assert!(group_rss(pgrp) > 0);
+        }
+    }
 
     #[test]
     fn filter_structure() {
