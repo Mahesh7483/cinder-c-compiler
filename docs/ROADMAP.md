@@ -96,6 +96,10 @@ Each milestone ends with: all tests green, results shown, one or more commits.
 | M9 | Benchmarks, differential harness, CI complete | `-O0` vs `-O2` table in README |
 | M10 | Server, sandbox, Monaco frontend, Dockerfile, `render.yaml`, docs, README | image builds; sandbox escape/limit tests pass |
 
+**Status:** M0–M6 are done (M6: all ten passes, `-f` toggles, verifier after
+every pass, unit tests, e2e at three levels, differential fuzzing; see
+[OPTIMIZER.md](OPTIMIZER.md)). M7 onwards is in progress.
+
 **Deliberate deviation from the brief's ordering:** the brief lists
 "optimizations" before "backend". I build the backend first (M5) and the
 optimizer second (M6). An optimizer can only be shown to preserve behaviour by
@@ -104,7 +108,13 @@ asks for is still delivered; only the order of two milestones changes.
 
 ## Environment notes (this machine)
 
-Windows host without `gcc`/`as`/`ld`; Linux x86-64 output is built, run and
-differentially tested against GCC inside a `rust:1-slim-bookworm` container
-(which ships `gcc`, `as`, `ld`). Front-end and middle-end tests also run
-natively on Windows.
+Windows host without `gcc`/`as`/`ld` (and with Git's `link.exe` shadowing
+MSVC's, so native `cargo test` cannot even link). `cargo check` works natively;
+everything that builds a binary or runs tests happens in a Linux x86-64
+container (`rust:1-slim-bookworm`, which ships `gcc`, `as`, `ld`):
+
+```
+bash scripts/dev-up.sh                  # start the container (once)
+bash scripts/dx.sh "cargo test"         # run anything inside it, in /work
+bash scripts/dx.sh "cargo clippy --all-targets -- -D warnings"
+```
