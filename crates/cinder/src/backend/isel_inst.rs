@@ -34,6 +34,28 @@ impl<'a> Isel<'a> {
                     self.emit(Op::Lea, Sz::Q, MOp::Reg(r), MOp::Mem(Mem::slot(slot)));
                 }
             }
+            InstKind::DynAlloca { size, .. } => {
+                // rsp -= round16(size); the object starts above the outgoing-argument area
+                self.mf.dyn_alloca = true;
+                let r = self.value_reg(i.dst.unwrap());
+                let t = self.gpr_v();
+                let s = self.reg(*size);
+                self.emit(Op::Mov, Sz::Q, MOp::Reg(t), MOp::Reg(s));
+                self.emit(Op::Add, Sz::Q, MOp::Reg(t), MOp::Imm(15));
+                self.emit(Op::And, Sz::Q, MOp::Reg(t), MOp::Imm(-16));
+                self.emit(Op::Sub, Sz::Q, MOp::Reg(Reg::P(RSP)), MOp::Reg(t));
+                self.emit(Op::Lea, Sz::Q, MOp::Reg(r), MOp::Mem(Mem { base: Base::OutgoingTop, index: None, disp: 0 }));
+            }
+            InstKind::StackSave => {
+                self.mf.dyn_alloca = true;
+                let r = self.value_reg(i.dst.unwrap());
+                self.emit(Op::Mov, Sz::Q, MOp::Reg(r), MOp::Reg(Reg::P(RSP)));
+            }
+            InstKind::StackRestore { ptr } => {
+                self.mf.dyn_alloca = true;
+                let p = self.reg(*ptr);
+                self.emit(Op::Mov, Sz::Q, MOp::Reg(Reg::P(RSP)), MOp::Reg(p));
+            }
             InstKind::VaRegSave => {
                 let d = i.dst.unwrap();
                 let slot = self.mf.regsave_slot.expect("variadic function has a register save area");

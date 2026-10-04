@@ -21,8 +21,11 @@ use crate::ir::*;
 use crate::lower::abi::{classify, AggAbi, Piece};
 use crate::session::Session;
 use crate::source::Span;
-use crate::types::{Ty, TyKind};
+use crate::types::{ArrayLen, Ty, TyKind};
 use std::collections::HashMap;
+
+/// Stack frames are 16-byte aligned; slots needing more are realigned in IR.
+pub const MAX_FRAME_ALIGN: u32 = 16;
 
 pub struct ModBuilder {
     pub m: Module,
@@ -122,6 +125,11 @@ pub(crate) struct FnLower<'a> {
     pub case_blocks: HashMap<u32, BlockId>,
     pub break_targets: Vec<BlockId>,
     pub continue_targets: Vec<BlockId>,
+    /// Saved stack pointers of the enclosing blocks that declare VLAs, outermost first.
+    pub vla_scopes: Vec<Operand>,
+    /// `vla_scopes.len()` when each enclosing loop/switch was entered (what `break`/`continue` unwind to).
+    pub break_vla: Vec<usize>,
+    pub continue_vla: Vec<usize>,
     pub sret: Option<Operand>,
     pub line: u32,
     pub next_group: u32,
@@ -162,6 +170,9 @@ impl<'a> FnLower<'a> {
             case_blocks: HashMap::new(),
             break_targets: Vec::new(),
             continue_targets: Vec::new(),
+            vla_scopes: Vec::new(),
+            break_vla: Vec::new(),
+            continue_vla: Vec::new(),
             sret: None,
             line: 0,
             next_group: 0,
@@ -255,6 +266,54 @@ impl<'a> FnLower<'a> {
         }
     }
 
+    /// Round the address of a stack slot (allocated with `align - 1` spare bytes) up to `align`.
+    pub fn realign(&mut self, raw: Operand, align: u32) -> Operand {
+        let i = self.cast(CastOp::PtrToInt, Type::Ptr, Type::I64, raw);
+        let i = self.bin(BinOp::Add, Type::I64, i, Operand::Int(align as i64 - 1, Type::I64));
+        let i = self.bin(BinOp::And, Type::I64, i, Operand::Int(-(align as i64), Type::I64));
+        self.cast(CastOp::IntToPtr, Type::I64, Type::Ptr, i)
+    }
+
+    /// The size in bytes of `ty`, as a run-time value (variable length arrays).
+    pub fn runtime_size(&mut self, ty: Ty) -> Operand {
+        if !self.hir.types.is_vla(ty) {
+            return Operand::Int(self.size_of(ty) as i64, Type::I64);
+        }
+        match self.hir.types.kind(ty).clone() {
+            TyKind::Array(elem, len) => {
+                let n = match len {
+                    ArrayLen::Vla(id) => self.vla_len(id),
+                    ArrayLen::Known(n) => Operand::Int(n as i64, Type::I64),
+                    ArrayLen::Incomplete => Operand::Int(0, Type::I64),
+                };
+                let es = self.runtime_size(elem);
+                self.bin(BinOp::Mul, Type::I64, n, es)
+            }
+            _ => Operand::Int(self.size_of(ty) as i64, Type::I64),
+        }
+    }
+
+    /// The run-time length held in the hidden local of VLA declarator `id`.
+    fn vla_len(&mut self, id: u32) -> Operand {
+        let Some(&(_, lid)) = self.hf.vla_lens.iter().find(|(i, _)| *i == id) else {
+            return Operand::Int(0, Type::I64);
+        };
+        let slot = self.slots[lid.0 as usize];
+        self.load(Type::I64, slot, false)
+    }
+
+    /// Size of the pointee of `ptr_ty` (which is a variable length array type) at run time.
+    pub fn dyn_pointee_size(&mut self, ptr_ty: Ty) -> Operand {
+        match self.hir.types.pointee(ptr_ty) {
+            Some(p) => self.runtime_size(p),
+            None => Operand::Int(1, Type::I64),
+        }
+    }
+
+    pub fn is_vla_pointee(&self, ptr_ty: Ty) -> bool {
+        self.hir.types.pointee(ptr_ty).is_some_and(|p| self.hir.types.is_vla(p))
+    }
+
     pub fn size_of(&self, ty: Ty) -> u64 {
         self.hir.types.size_of(ty).unwrap_or(0)
     }
@@ -333,14 +392,30 @@ impl<'a> FnLower<'a> {
                 Passing::Nothing => incoming.push(Incoming { local: lid, vals: vec![], byval: None, scalar: None }),
             }
         }
-        // Allocas for every local (static slots in the entry block).
+        // Allocas for every local (static slots in the entry block). Frames are only
+        // 16-byte aligned, so a slot that needs more is over-allocated and its address
+        // rounded up in IR (see `realign`).
+        let mut over_aligned: Vec<(usize, u32)> = Vec::new();
         for (i, l) in hf.locals.iter().enumerate() {
+            if self.hir.types.is_vla(l.ty) {
+                // allocated on the stack where the declaration is reached (`HStmtKind::VlaDecl`)
+                self.slots.push(Operand::Undef(Type::Ptr));
+                continue;
+            }
             let size = round_up(self.size_of(l.ty).max(1), 8);
-            let size = if self.is_agg(l.ty) { size } else { self.size_of(l.ty).max(1) };
+            let size = if self.is_agg(l.ty) { size } else { self.size_of(l.ty).max(1) } as u32;
             let align = (l.align as u32).max(self.align_of(l.ty)).max(1);
-            let slot = self.emit_named(InstKind::Alloca { size: size as u32, align }, Type::Ptr, l.name);
+            let kind = if align > MAX_FRAME_ALIGN {
+                over_aligned.push((i, align));
+                InstKind::Alloca { size: size + align - 1, align: MAX_FRAME_ALIGN }
+            } else {
+                InstKind::Alloca { size, align }
+            };
+            let slot = self.emit_named(kind, Type::Ptr, l.name);
             self.slots.push(slot);
-            let _ = i;
+        }
+        for (i, align) in over_aligned {
+            self.slots[i] = self.realign(self.slots[i], align);
         }
         // By-value aggregate parameters live in the caller-provided stack copy.
         for inc in &incoming {

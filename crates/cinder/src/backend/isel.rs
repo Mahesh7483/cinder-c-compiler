@@ -126,6 +126,7 @@ impl<'a> Isel<'a> {
             hints: HashMap::new(),
             used_callee_saved: Vec::new(),
             frame_size: 0,
+            dyn_alloca: false,
         };
         let nv = f.values.len();
         let mut s = Isel {

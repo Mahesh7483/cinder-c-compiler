@@ -21,6 +21,22 @@ impl<'a> FnLower<'a> {
                     self.emit_init(slot, plan, ty);
                 }
             }
+            HStmtKind::VlaDecl { local } => {
+                let ty = self.hf.locals[local.0 as usize].ty;
+                let size = self.runtime_size(ty);
+                let p = self.val(InstKind::DynAlloca { size, align: 16 }, Type::Ptr);
+                self.slots[local.0 as usize] = p;
+            }
+            HStmtKind::VlaScope(items) => {
+                // leaving the block releases the stack its VLAs took
+                let save = self.val(InstKind::StackSave, Type::Ptr);
+                self.vla_scopes.push(save);
+                for it in items {
+                    self.stmt(it);
+                }
+                self.vla_scopes.pop();
+                self.emit(InstKind::StackRestore { ptr: save }, None);
+            }
             HStmtKind::Block(items) => {
                 for it in items {
                     self.stmt(it);
@@ -110,7 +126,9 @@ impl<'a> FnLower<'a> {
                 self.terminate(Term::Switch { ty, val: v, cases: targets, default: default_bb });
                 self.start_dead_block();
                 self.break_targets.push(end);
+                self.break_vla.push(self.vla_scopes.len());
                 self.stmt(body);
+                self.break_vla.pop();
                 self.break_targets.pop();
                 self.br(end);
                 self.set_cur(end);
@@ -122,11 +140,15 @@ impl<'a> FnLower<'a> {
             }
             HStmtKind::Break => {
                 let t = *self.break_targets.last().expect("break outside loop/switch");
+                let depth = *self.break_vla.last().expect("break depth");
+                self.restore_vla(depth);
                 self.br(t);
                 self.start_dead_block();
             }
             HStmtKind::Continue => {
                 let t = *self.continue_targets.last().expect("continue outside loop");
+                let depth = *self.continue_vla.last().expect("continue depth");
+                self.restore_vla(depth);
                 self.br(t);
                 self.start_dead_block();
             }
@@ -161,9 +183,22 @@ impl<'a> FnLower<'a> {
     fn in_loop(&mut self, brk: BlockId, cont: BlockId, f: impl FnOnce(&mut Self)) {
         self.break_targets.push(brk);
         self.continue_targets.push(cont);
+        self.break_vla.push(self.vla_scopes.len());
+        self.continue_vla.push(self.vla_scopes.len());
         f(self);
+        self.break_vla.pop();
+        self.continue_vla.pop();
         self.break_targets.pop();
         self.continue_targets.pop();
+    }
+
+    /// Release the stack of the VLA blocks being left by a `break`/`continue`
+    /// (everything entered since the target loop/switch began).
+    fn restore_vla(&mut self, depth: usize) {
+        if self.vla_scopes.len() > depth {
+            let ptr = self.vla_scopes[depth];
+            self.emit(InstKind::StackRestore { ptr }, None);
+        }
     }
 
     fn lower_return(&mut self, v: Option<&'a HExpr>) {

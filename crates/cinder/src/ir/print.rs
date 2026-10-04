@@ -216,6 +216,9 @@ impl<'a> P<'a> {
                     a.join(", ")
                 )
             }
+            InstKind::DynAlloca { size, align } => format!("dynalloca {}, align {}", self.op(*size), align),
+            InstKind::StackSave => "stacksave".to_string(),
+            InstKind::StackRestore { ptr } => format!("stackrestore {}", self.op(*ptr)),
             InstKind::VaRegSave => "va_reg_save_area".to_string(),
             InstKind::VaStackArgs => "va_stack_args".to_string(),
             InstKind::Trap => "trap".to_string(),

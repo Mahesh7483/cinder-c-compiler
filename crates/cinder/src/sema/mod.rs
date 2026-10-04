@@ -71,6 +71,10 @@ struct FnCtx {
     loops: u32,
     breakables: u32,
     next_case: u32,
+    /// Hidden length locals of variable length array declarators, by declarator id.
+    vla_lens: Vec<(u32, LocalId)>,
+    /// The innermost block being analysed declares a VLA directly (it must restore the stack on exit).
+    vla_direct: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -101,6 +105,12 @@ pub struct Sema<'a> {
     global_names: HashMap<Symbol, SymId>,
     f: Option<FnCtx>,
     anon_counter: u32,
+    next_vla: u32,
+    /// Assignments of VLA lengths still to be emitted (in evaluation order).
+    pending_vla: Vec<HExpr>,
+    /// Size expressions of parameter array types that mention other parameters;
+    /// evaluated at the start of the function body, once the parameters are in scope.
+    param_vla_exprs: Vec<(u32, Expr)>,
 }
 
 /// Analyze a parsed translation unit. Returns `None` if any error was reported.
@@ -117,6 +127,9 @@ pub fn analyze(sess: &mut Session, tu: &TranslationUnit) -> Option<HirModule> {
         global_names: HashMap::new(),
         f: None,
         anon_counter: 0,
+        next_vla: 0,
+        pending_vla: Vec::new(),
+        param_vla_exprs: Vec::new(),
     };
     for d in &tu.decls {
         match d {
@@ -879,6 +892,14 @@ impl<'a> Sema<'a> {
         let len = match size {
             ArraySize::Unspecified | ArraySize::Star => ArrayLen::Incomplete,
             ArraySize::Expr(e) => {
+                if ctx == DeclCtx::Param && self.f.is_none() && !self.looks_constant(e) {
+                    // `void f(int n, int a[n][n])`: `n` is not in scope yet; the size is
+                    // evaluated at the start of the function body (see `function_def`).
+                    let id = self.next_vla;
+                    self.next_vla += 1;
+                    self.param_vla_exprs.push((id, Expr::clone(e)));
+                    return self.types.array(elem, ArrayLen::Vla(id));
+                }
                 let h = self.expr(e);
                 let h = self.rvalue(h);
                 if !self.types.is_integer(h.ty) {
@@ -898,15 +919,57 @@ impl<'a> Sema<'a> {
                     None => {
                         if ctx == DeclCtx::File || ctx == DeclCtx::Member {
                             self.error(e.span, "variable length array declaration is not allowed here");
-                        } else {
-                            self.error(e.span, "not yet supported: variable length arrays");
+                            return self.types.p.int;
                         }
-                        return self.types.p.int;
+                        if self.f.is_none() {
+                            // prototype scope: the size can never be evaluated
+                            return self.types.array(elem, ArrayLen::Vla(u32::MAX));
+                        }
+                        return self.make_vla(elem, h, e.span);
                     }
                 }
             }
         };
         self.types.array(elem, len)
+    }
+
+    /// Could `e` be an integer constant expression? (Parameter array sizes are
+    /// analysed before the parameters themselves are in scope.)
+    fn looks_constant(&self, e: &Expr) -> bool {
+        match &e.kind {
+            ExprKind::IntLit(_) | ExprKind::CharLit(_) | ExprKind::FloatLit(_) => true,
+            ExprKind::SizeofExpr(_) | ExprKind::SizeofType(_) | ExprKind::AlignofType(_) => true,
+            ExprKind::Paren(x) => self.looks_constant(x),
+            ExprKind::Unary { operand, .. } => self.looks_constant(operand),
+            ExprKind::Binary { lhs, rhs, .. } => self.looks_constant(lhs) && self.looks_constant(rhs),
+            ExprKind::Cond { cond, then, els } => {
+                self.looks_constant(cond) && self.looks_constant(then) && self.looks_constant(els)
+            }
+            ExprKind::Cast { operand, .. } => self.looks_constant(operand),
+            ExprKind::Ident(n) => matches!(self.lookup(*n).map(|x| &x.kind), Some(EntKind::EnumConst(..))),
+            _ => false,
+        }
+    }
+
+    /// A variable length array type: its length goes into a hidden local that is
+    /// assigned where the declaration is reached (see `flush_vla_inits`).
+    fn make_vla(&mut self, elem: Ty, len: HExpr, span: Span) -> Ty {
+        let id = self.next_vla;
+        self.next_vla += 1;
+        let ul = self.types.p.ulong;
+        let lid = self.new_local(Symbol::new("<vla length>"), ul, span, false, 8);
+        let f = self.f.as_mut().expect("function");
+        f.locals[lid.0 as usize].used = true;
+        f.vla_lens.push((id, lid));
+        let val = self.cast_to(len, ul);
+        let target = HExpr::new(HExprKind::Local(lid), ul, span);
+        self.pending_vla.push(HExpr::new(HExprKind::Assign(Box::new(target), Box::new(val)), ul, span));
+        self.types.array(elem, ArrayLen::Vla(id))
+    }
+
+    /// The statements that assign the lengths of the VLA types just declared.
+    fn flush_vla_inits(&mut self, span: Span) -> Vec<HStmt> {
+        std::mem::take(&mut self.pending_vla).into_iter().map(|e| HStmt { kind: HStmtKind::Expr(e), span }).collect()
     }
 
     fn function_suffix(&mut self, ret: Ty, params: &[ParamDecl], variadic: bool, span: Span) -> (Ty, Vec<ParamInfo>) {
@@ -1103,6 +1166,7 @@ impl<'a> Sema<'a> {
         for id in &d.declarators {
             let decl = &id.declarator;
             let (ty, name, _) = self.apply_declarator(base, decl, DeclCtx::Block);
+            out.extend(self.flush_vla_inits(decl.span));
             self.check_attrs(&decl.attrs);
             let Some(name) = name else { continue };
             if storage == Some(StorageClass::Typedef) {
@@ -1136,6 +1200,10 @@ impl<'a> Sema<'a> {
                 align = align.max(a);
             }
             let mut ty = ty;
+            if self.types.is_vla(ty) && matches!(storage, Some(StorageClass::Extern | StorageClass::Static)) {
+                self.error(name.span, "variable length array cannot have static storage duration or linkage");
+                continue;
+            }
             match storage {
                 Some(StorageClass::Extern) => {
                     if id.init.is_some() {
@@ -1168,10 +1236,21 @@ impl<'a> Sema<'a> {
                     sym.tentative = sym.init.is_none();
                 }
                 _ => {
-                    if id.init.is_none() && !self.require_complete(ty, name.span, "variable") {
+                    if self.types.is_vla(ty) {
+                        if id.init.is_some() {
+                            self.error(name.span, "variable length array may not be initialized");
+                        }
+                        let natural = self.types.align_of(ty);
+                        let lid = self.new_local(name.name, ty, name.span, false, align.max(natural));
+                        if Self::has_attr(&d.specs.attrs, "unused") || Self::has_attr(&decl.attrs, "unused") {
+                            self.f.as_mut().unwrap().locals[lid.0 as usize].used = true;
+                        }
+                        self.declare_ordinary(name.name, EntKind::Local(lid), name.span);
+                        self.f.as_mut().unwrap().vla_direct = true;
+                        out.push(HStmt { kind: HStmtKind::VlaDecl { local: lid }, span: name.span });
                         continue;
                     }
-                    if self.types.is_vla(ty) {
+                    if id.init.is_none() && !self.require_complete(ty, name.span, "variable") {
                         continue;
                     }
                     let natural = if self.types.is_complete(ty) { self.types.align_of(ty) } else { 1 };
@@ -1202,6 +1281,8 @@ impl<'a> Sema<'a> {
     // ───────────────────────────── functions ─────────────────────────────
 
     fn function_def(&mut self, f: &FuncDef) {
+        self.param_vla_exprs.clear();
+        self.pending_vla.clear();
         let base = self.type_from_specs(&f.specs);
         let storage = f.specs.storage.map(|(s, _)| s);
         let (fty, name, params) = self.apply_declarator(base, &f.declarator, DeclCtx::File);
@@ -1247,6 +1328,8 @@ impl<'a> Sema<'a> {
             loops: 0,
             breakables: 0,
             next_case: 0,
+            vla_lens: Vec::new(),
+            vla_direct: false,
         });
         self.push_scope();
         let mut param_ids = Vec::new();
@@ -1269,10 +1352,33 @@ impl<'a> Sema<'a> {
             }
             param_ids.push(id);
         }
+        // Parameter array sizes that mention other parameters, now that those are in scope.
+        let mut prologue: Vec<HStmt> = Vec::new();
+        for (id, e) in std::mem::take(&mut self.param_vla_exprs) {
+            let h = self.rexpr(&e);
+            if Self::is_error(&h) {
+                continue;
+            }
+            if !self.types.is_integer(h.ty) {
+                let t = self.show(h.ty);
+                self.error(e.span, format!("size of array has non-integer type '{}'", t));
+                continue;
+            }
+            let ul = self.types.p.ulong;
+            let lid = self.new_local(Symbol::new("<vla length>"), ul, e.span, false, 8);
+            let fc = self.f.as_mut().unwrap();
+            fc.locals[lid.0 as usize].used = true;
+            fc.vla_lens.push((id, lid));
+            let val = self.cast_to(h, ul);
+            let target = HExpr::new(HExprKind::Local(lid), ul, e.span);
+            let asg = HExpr::new(HExprKind::Assign(Box::new(target), Box::new(val)), ul, e.span);
+            prologue.push(HStmt { kind: HStmtKind::Expr(asg), span: e.span });
+        }
         // The outermost block of the body shares the parameter scope.
         let body = match &f.body.kind {
             StmtKind::Compound(items) => {
-                let stmts = self.block_items(items);
+                let mut stmts = prologue;
+                stmts.extend(self.block_items(items));
                 HStmt { kind: HStmtKind::Block(stmts), span: f.body.span }
             }
             _ => unreachable!("function body is a compound statement"),
@@ -1298,6 +1404,7 @@ impl<'a> Sema<'a> {
             ret: sig.ret,
             variadic: sig.variadic,
             labels: label_names,
+            vla_lens: ctx.vla_lens,
             span: f.span,
             is_static: storage == Some(StorageClass::Static),
             is_inline: f.specs.inline,

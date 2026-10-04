@@ -157,7 +157,14 @@ fn profitable(g: &Func, refs: u32) -> bool {
     let size = g.num_insts() + g.blocks.len();
     for b in &g.blocks {
         for &id in &b.insts {
-            if matches!(g.insts[id.idx()].kind, InstKind::VaRegSave | InstKind::VaStackArgs) {
+            if matches!(
+                g.insts[id.idx()].kind,
+                InstKind::VaRegSave
+                    | InstKind::VaStackArgs
+                    | InstKind::DynAlloca { .. }
+                    | InstKind::StackSave
+                    | InstKind::StackRestore { .. }
+            ) {
                 return false;
             }
         }

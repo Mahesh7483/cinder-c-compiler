@@ -27,6 +27,9 @@ pub fn layout(mf: &mut MFunc) {
         off = align_up(off + s.size, s.align);
         s.offset = off as i32;
     }
-    let total = align_up(off + mf.outgoing, 16);
+    // With run-time stack allocation the area between the lowest local and `%rsp`
+    // must hold the whole rounded outgoing area, so dynamic memory can start right above it.
+    let total =
+        if mf.dyn_alloca { align_up(off, 16) + align_up(mf.outgoing, 16) } else { align_up(off + mf.outgoing, 16) };
     mf.frame_size = total - 8 * k;
 }

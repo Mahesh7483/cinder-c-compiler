@@ -76,6 +76,9 @@ pub fn eval(types: &TypeTable, e: &HExpr) -> Option<ConstVal> {
             }
         }
         HExprKind::PtrAdd { ptr, idx, scale, negate } => {
+            if *scale == 0 {
+                return None; // pointer to a variable length array: stride known only at run time
+            }
             let p = eval(types, ptr)?;
             let ConstVal::Int(i) = eval(types, idx)? else { return None };
             let delta = (i as i64).wrapping_mul(*scale as i64);
@@ -87,6 +90,9 @@ pub fn eval(types: &TypeTable, e: &HExpr) -> Option<ConstVal> {
             }
         }
         HExprKind::PtrDiff { l, r, elem_size } => {
+            if *elem_size == 0 {
+                return None;
+            }
             let (a, b) = (eval(types, l)?, eval(types, r)?);
             match (a, b) {
                 (ConstVal::Addr { base: b1, offset: o1 }, ConstVal::Addr { base: b2, offset: o2 }) if b1 == b2 => {

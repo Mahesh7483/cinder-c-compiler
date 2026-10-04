@@ -794,3 +794,27 @@ fn optimizing_twice_changes_nothing_further() {
     let twice = print_module(&m);
     assert_eq!(once, twice);
 }
+
+// ───────────────────────────── variable length arrays ─────────────────────────────
+
+#[test]
+fn inline_skips_callees_that_allocate_stack_dynamically() {
+    let m = run(
+        "static int sum(int n) { int a[n]; for (int i = 0; i < n; i++) a[i] = i; return a[n - 1]; } int f(int k) { return sum(k) + 1; }",
+        &["mem2reg", "inline"],
+    );
+    assert!(text(&m, "f").contains("call"), "{}", text(&m, "f"));
+}
+
+#[test]
+fn tailcall_is_not_formed_in_functions_with_vlas() {
+    let m = run("int g(int); int f(int n) { int a[n]; a[0] = n; return g(a[0]); }", &["mem2reg", "tailcall"]);
+    assert!(!has_op(func(&m, "f"), |k| matches!(k, InstKind::Call { tail: true, .. })), "{}", text(&m, "f"));
+}
+
+#[test]
+fn dynamic_allocation_survives_every_pass() {
+    let m = at("int f(int n) { int a[n]; a[0] = 1; return n; }", 2);
+    // the allocation has an observable effect on the stack pointer, so it is not dead code
+    assert!(has_op(func(&m, "f"), |k| matches!(k, InstKind::DynAlloca { .. })), "{}", text(&m, "f"));
+}

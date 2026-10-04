@@ -19,7 +19,7 @@ fn has_side_effects(e: &HExpr) -> bool {
         | Trap
         | Error => true,
         CompoundLit { .. } => true,
-        Int(_) | Float(_) | Str(_) | Local(_) | Global(_) => false,
+        Int(_) | Float(_) | Str(_) | Local(_) | Global(_) | VlaSizeof(_) => false,
         Deref(x) | AddrOf(x) | Unary(_, x) | Member(x, _) => has_side_effects(x),
         Cast(_, x) => has_side_effects(x),
         Binary(_, a, b) | LogAnd(a, b) | LogOr(a, b) => has_side_effects(a) || has_side_effects(b),
@@ -103,9 +103,20 @@ impl<'a> Sema<'a> {
             }
             StmtKind::Compound(items) => {
                 self.push_scope();
+                // only a block that declares a VLA itself saves and restores the stack: a
+                // `switch` body, say, can be entered through its case labels
+                let outer = self.f.as_mut().map(|f| std::mem::replace(&mut f.vla_direct, false));
                 let stmts = self.block_items(items);
                 self.pop_scope();
-                self.mk(HStmtKind::Block(stmts), span)
+                let has_vla = match self.f.as_mut() {
+                    Some(f) => std::mem::replace(&mut f.vla_direct, outer.unwrap_or(false)),
+                    None => false,
+                };
+                if has_vla {
+                    self.mk(HStmtKind::VlaScope(stmts), span)
+                } else {
+                    self.mk(HStmtKind::Block(stmts), span)
+                }
             }
             StmtKind::If { cond, then, els } => {
                 let c = self.condition(cond, "if");

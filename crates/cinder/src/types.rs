@@ -49,8 +49,10 @@ pub enum ArrayLen {
     Known(u64),
     /// `int a[]`
     Incomplete,
-    /// Variable length array; the size is a run-time value.
-    Vla,
+    /// Variable length array. Every declarator gets its own id; the length is a
+    /// run-time value held in a hidden local of the function that declared it
+    /// (`HirFunc::vla_lens`). `u32::MAX` means "unknown" (prototype scope).
+    Vla(u32),
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -477,7 +479,7 @@ impl TypeTable {
 
     pub fn is_vla(&self, t: Ty) -> bool {
         match self.kind(t) {
-            TyKind::Array(e, len) => *len == ArrayLen::Vla || self.is_vla(*e),
+            TyKind::Array(e, len) => matches!(len, ArrayLen::Vla(_)) || self.is_vla(*e),
             _ => false,
         }
     }
@@ -677,7 +679,7 @@ impl TypeTable {
                 let e = self.composite(x, y);
                 let len = match (lx, ly) {
                     (ArrayLen::Known(n), _) | (_, ArrayLen::Known(n)) => ArrayLen::Known(n),
-                    (ArrayLen::Vla, _) | (_, ArrayLen::Vla) => ArrayLen::Vla,
+                    (ArrayLen::Vla(id), _) | (_, ArrayLen::Vla(id)) => ArrayLen::Vla(id),
                     _ => ArrayLen::Incomplete,
                 };
                 self.array(e, len)
@@ -782,7 +784,7 @@ impl TypeTable {
                 let l = match len {
                     ArrayLen::Known(n) => n.to_string(),
                     ArrayLen::Incomplete => String::new(),
-                    ArrayLen::Vla => "*".to_string(),
+                    ArrayLen::Vla(_) => "*".to_string(),
                 };
                 self.declarator_string(*e, format!("{}[{}]", inner, l))
             }

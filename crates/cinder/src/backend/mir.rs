@@ -130,6 +130,9 @@ pub enum Base {
     Incoming,
     /// Outgoing argument area: `disp(%rsp)`.
     Outgoing,
+    /// Just above the (16-byte rounded) outgoing area: where dynamically
+    /// allocated stack memory starts. `disp + round16(outgoing)(%rsp)`.
+    OutgoingTop,
     /// A symbol, addressed rip-relative.
     Sym(SymId),
     /// A floating-point/mask constant from the function's constant pool.
@@ -481,6 +484,9 @@ pub struct MFunc {
     pub used_callee_saved: Vec<u8>,
     /// Total bytes subtracted from `%rsp` in the prologue (after pushes).
     pub frame_size: u32,
+    /// The function allocates stack memory at run time (VLAs): `%rsp` moves, so
+    /// the frame reserves a 16-byte-rounded outgoing area below the locals.
+    pub dyn_alloca: bool,
 }
 
 impl MFunc {

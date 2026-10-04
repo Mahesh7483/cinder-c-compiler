@@ -219,9 +219,22 @@ fn inst_type_check(f: &Func, k: &InstKind, inst: &Inst, what: &str, errs: &mut V
     let mut bad = |msg: String| errs.push(format!("{}: {}", what, msg));
     let dst_ty = inst.dst.map(|d| f.values[d.idx()].ty);
     match k {
-        InstKind::Alloca { .. } | InstKind::VaRegSave | InstKind::VaStackArgs => {
+        InstKind::Alloca { .. } | InstKind::StackSave | InstKind::VaRegSave | InstKind::VaStackArgs => {
             if dst_ty != Some(Type::Ptr) {
                 bad("result must be ptr".into());
+            }
+        }
+        InstKind::DynAlloca { size, .. } => {
+            if ty(*size) != Type::I64 {
+                bad("dynalloca size must be i64".into());
+            }
+            if dst_ty != Some(Type::Ptr) {
+                bad("result must be ptr".into());
+            }
+        }
+        InstKind::StackRestore { ptr } => {
+            if ty(*ptr) != Type::Ptr {
+                bad("stackrestore operand must be ptr".into());
             }
         }
         InstKind::Load { ty: t, ptr, .. } => {

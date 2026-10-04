@@ -150,6 +150,10 @@ impl<'a> Emitter<'a> {
                 base = "%rbp".to_string();
             }
             Base::Outgoing => base = "%rsp".to_string(),
+            Base::OutgoingTop => {
+                disp += (mf.outgoing as i64 + 15) / 16 * 16;
+                base = "%rsp".to_string();
+            }
             Base::Sym(s) => {
                 prefix = self.sym_name(s);
                 if m.index.is_none() {

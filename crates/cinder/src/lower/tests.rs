@@ -579,3 +579,33 @@ fn emit_ir_text_has_expected_shape() {
         assert!(t.contains(l), "missing {l:?} in:\n{t}");
     }
 }
+
+// ───────────────────────────── variable length arrays ─────────────────────────────
+
+#[test]
+fn vla_uses_dynamic_stack_and_restores_it_at_block_exit() {
+    let t = ir("int f(int n) { int s = 0; { int a[n]; a[0] = 1; s = a[0]; } return s; }");
+    assert!(t.contains("dynalloca"), "{t}");
+    assert!(t.contains("stacksave") && t.contains("stackrestore"), "{t}");
+}
+
+#[test]
+fn vla_strides_are_computed_at_run_time() {
+    let t = ir("int f(int r, int c) { int m[r][c]; return m[1][2]; }");
+    // the row stride is c * 4, a multiplication on loaded values, not a constant
+    assert!(t.contains("mul i64"), "{t}");
+    assert!(t.matches("dynalloca").count() == 1, "{t}");
+}
+
+#[test]
+fn break_out_of_a_vla_block_releases_the_stack() {
+    let t = ir("int f(int n) { for (;;) { int a[n]; a[0] = n; if (a[0]) break; } return 0; }");
+    // one restore at the end of the block, one before the jump out of it
+    assert!(t.matches("stackrestore").count() >= 2, "{t}");
+}
+
+#[test]
+fn blocks_without_vlas_do_not_touch_the_stack_pointer() {
+    let t = ir("int f(int n) { int a[8]; a[0] = n; return a[0]; }");
+    assert!(!t.contains("stacksave") && !t.contains("dynalloca"), "{t}");
+}

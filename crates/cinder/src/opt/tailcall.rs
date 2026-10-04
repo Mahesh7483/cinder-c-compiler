@@ -41,6 +41,16 @@ fn tail_position(f: &Func, b: BlockId) -> Option<InstId> {
 
 /// No stack slot has its address observed outside plain loads and stores.
 fn frame_is_private(f: &Func) -> bool {
+    // dynamically allocated stack (VLAs) is part of the frame too
+    let dynamic = f.blocks.iter().flat_map(|b| &b.insts).any(|&i| {
+        matches!(
+            f.insts[i.idx()].kind,
+            InstKind::DynAlloca { .. } | InstKind::StackSave | InstKind::StackRestore { .. }
+        )
+    });
+    if dynamic {
+        return false;
+    }
     let total = f.blocks[0].insts.iter().filter(|id| matches!(f.insts[id.idx()].kind, InstKind::Alloca { .. })).count();
     alias::non_escaping_allocas(f).len() == total
 }

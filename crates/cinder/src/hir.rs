@@ -96,6 +96,9 @@ pub struct HirFunc {
     pub variadic: bool,
     /// Number of named labels (for diagnostics/dumps).
     pub labels: Vec<Symbol>,
+    /// Hidden locals holding the run-time length of each variable length array
+    /// declarator (`ArrayLen::Vla(id)`), by declarator id.
+    pub vla_lens: Vec<(u32, LocalId)>,
     pub span: Span,
     pub is_static: bool,
     pub is_inline: bool,
@@ -304,6 +307,8 @@ pub enum HExprKind {
     VaEnd(Box<HExpr>),
     VaCopy(Box<HExpr>, Box<HExpr>),
     VaArg(Box<HExpr>),
+    /// `sizeof` of a variable length array type, computed at run time.
+    VlaSizeof(Ty),
     /// `__builtin_trap()` / `__builtin_unreachable()`
     Trap,
     /// An expression that failed to type-check (already diagnosed).
@@ -346,6 +351,14 @@ pub enum HStmtKind {
         local: LocalId,
         init: Option<InitPlan>,
     },
+    /// Definition of a variable length array: allocates its storage on the
+    /// stack (its length variables were assigned by the preceding statements).
+    VlaDecl {
+        local: LocalId,
+    },
+    /// A block that declares variable length arrays: the stack is restored to
+    /// its state on entry when the block is left.
+    VlaScope(Vec<HStmt>),
     Block(Vec<HStmt>),
     If(HExpr, Box<HStmt>, Option<Box<HStmt>>),
     While(HExpr, Box<HStmt>),

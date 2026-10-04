@@ -333,15 +333,24 @@ impl<'a> FnLower<'a> {
             HExprKind::PtrAdd { ptr, idx, scale, negate } => {
                 let p = self.rv(ptr);
                 let i = self.rv(idx);
-                self.ptr_index(p, i, *scale, *negate)
+                if *scale == 0 {
+                    let sz = self.dyn_pointee_size(ptr.ty);
+                    self.ptr_index_dyn(p, i, sz, *negate)
+                } else {
+                    self.ptr_index(p, i, *scale, *negate)
+                }
             }
+            HExprKind::VlaSizeof(t) => self.runtime_size(*t),
             HExprKind::PtrDiff { l, r, elem_size } => {
                 let a = self.rv(l);
                 let b = self.rv(r);
                 let ai = self.cast(CastOp::PtrToInt, Type::Ptr, Type::I64, a);
                 let bi = self.cast(CastOp::PtrToInt, Type::Ptr, Type::I64, b);
                 let d = self.bin(BinOp::Sub, Type::I64, ai, bi);
-                if *elem_size > 1 {
+                if *elem_size == 0 {
+                    let sz = self.dyn_pointee_size(l.ty);
+                    self.bin(BinOp::SDiv, Type::I64, d, sz)
+                } else if *elem_size > 1 {
                     self.bin(BinOp::SDiv, Type::I64, d, Operand::Int(*elem_size as i64, Type::I64))
                 } else {
                     d
@@ -440,6 +449,13 @@ impl<'a> FnLower<'a> {
                 }
             }
         }
+    }
+
+    /// Like [`Self::ptr_index`] with a stride that is only known at run time.
+    pub fn ptr_index_dyn(&mut self, p: Operand, i: Operand, scale: Operand, negate: bool) -> Operand {
+        let scaled = self.bin(BinOp::Mul, Type::I64, i, scale);
+        let off = if negate { self.bin(BinOp::Sub, Type::I64, Operand::Int(0, Type::I64), scaled) } else { scaled };
+        self.val(InstKind::PtrAdd { base: p, offset: off }, Type::Ptr)
     }
 
     pub fn ptr_index(&mut self, p: Operand, i: Operand, scale: u64, negate: bool) -> Operand {
@@ -651,8 +667,13 @@ impl<'a> FnLower<'a> {
         let p = self.place(place);
         let old = self.load_place(&p, place.ty);
         let new = if self.hir.types.is_pointer(place.ty) {
-            let scale = self.pointee_size(place.ty);
-            self.ptr_index(old, v, scale, op == BinKind::Sub)
+            if self.is_vla_pointee(place.ty) {
+                let sz = self.dyn_pointee_size(place.ty);
+                self.ptr_index_dyn(old, v, sz, op == BinKind::Sub)
+            } else {
+                let scale = self.pointee_size(place.ty);
+                self.ptr_index(old, v, scale, op == BinKind::Sub)
+            }
         } else {
             let ct = self.ity(calc);
             let oldc = self.convert(old, place.ty, calc);
@@ -727,8 +748,13 @@ impl<'a> FnLower<'a> {
         let old = self.load_place(&p, place.ty);
         let ty = place.ty;
         let new = if self.hir.types.is_pointer(ty) {
-            let scale = self.pointee_size(ty);
-            self.ptr_index(old, Operand::Int(1, Type::I64), scale, !is_inc)
+            if self.is_vla_pointee(ty) {
+                let sz = self.dyn_pointee_size(ty);
+                self.ptr_index_dyn(old, Operand::Int(1, Type::I64), sz, !is_inc)
+            } else {
+                let scale = self.pointee_size(ty);
+                self.ptr_index(old, Operand::Int(1, Type::I64), scale, !is_inc)
+            }
         } else if self.hir.types.is_floating(ty) {
             let t = self.ity(ty);
             self.bin(if is_inc { BinOp::FAdd } else { BinOp::FSub }, t, old, Operand::float(1.0, t))
@@ -853,7 +879,9 @@ impl<'a> FnLower<'a> {
     /// A stack temporary big enough to hold a value of aggregate type `ty`.
     pub fn temp_for(&mut self, ty: Ty) -> Operand {
         let size = round_up(self.size_of(ty).max(1), 8);
-        let align = self.align_of(ty).max(8);
+        let want = self.align_of(ty).max(8);
+        let over = want > MAX_FRAME_ALIGN;
+        let (size, align) = if over { (size + want as u64 - 1, MAX_FRAME_ALIGN) } else { (size, want) };
         // allocas must live in the entry block
         let line = self.line;
         let entry = self.f.entry();
@@ -862,7 +890,8 @@ impl<'a> FnLower<'a> {
             .iter()
             .take_while(|i| matches!(self.f.insts[i.idx()].kind, InstKind::Alloca { .. }))
             .count();
-        self.f
+        let slot = self
+            .f
             .insert(
                 entry,
                 pos,
@@ -871,7 +900,12 @@ impl<'a> FnLower<'a> {
                 Some(Symbol::new("tmp")),
                 line,
             )
-            .unwrap()
+            .unwrap();
+        if over {
+            self.realign(slot, want)
+        } else {
+            slot
+        }
     }
 
     fn lower_arg(&mut self, a: &'a HExpr, out: &mut Vec<CallArg>) {

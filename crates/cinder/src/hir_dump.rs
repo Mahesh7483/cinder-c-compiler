@@ -81,6 +81,7 @@ impl<'a> D<'a> {
                 n("Conditional".into()).with(self.expr(c)).with(self.expr(a)).with(self.expr(b))
             }
             HExprKind::Comma(a, b) => n("Comma".into()).with(self.expr(a)).with(self.expr(b)),
+            HExprKind::VlaSizeof(t) => n(format!("VlaSizeof '{}'", self.ty(*t))),
             HExprKind::Assign(p, v) => n("Assign".into()).with(self.expr(p)).with(self.expr(v)),
             HExprKind::CompoundAssign { op, place, value, calc } => {
                 n(format!("CompoundAssign '{}=' in '{}'", op.spelling(), self.ty(*calc)))
@@ -154,6 +155,17 @@ impl<'a> D<'a> {
                 let mut n = Node::new(format!("Decl {} : '{}'{}", self.local_name(*local), self.ty(l.ty), loc));
                 if let Some(p) = init {
                     n.children.push(self.plan(p));
+                }
+                n
+            }
+            HStmtKind::VlaDecl { local } => {
+                let l = &self.locals[local.0 as usize];
+                Node::new(format!("VlaDecl {} : '{}'{}", self.local_name(*local), self.ty(l.ty), loc))
+            }
+            HStmtKind::VlaScope(items) => {
+                let mut n = Node::new(format!("VlaScope{}", loc));
+                for i in items {
+                    n.children.push(self.stmt(i));
                 }
                 n
             }

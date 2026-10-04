@@ -54,7 +54,7 @@ impl<'a> Sema<'a> {
         HExpr::new(HExprKind::Int(consteval::norm(&self.types, v, ty)), ty, span)
     }
 
-    fn is_error(e: &HExpr) -> bool {
+    pub(crate) fn is_error(e: &HExpr) -> bool {
         matches!(e.kind, HExprKind::Error)
     }
 
@@ -509,8 +509,10 @@ impl<'a> Sema<'a> {
             ExprKind::Cast { ty, operand } => self.cast_expr(ty, operand, span),
             ExprKind::SizeofExpr(x) => self.sizeof_expr(x, span),
             ExprKind::SizeofType(t) => {
+                let mark = self.pending_vla.len();
                 let ty = self.type_name(t);
-                self.sizeof_type(ty, span)
+                let e = self.sizeof_type(ty, span);
+                self.wrap_vla_inits(mark, e)
             }
             ExprKind::AlignofType(t) => {
                 let ty = self.type_name(t);
@@ -842,6 +844,9 @@ impl<'a> Sema<'a> {
         let p = self.types.pointee(ptr_ty)?;
         if self.types.is_void(p) || self.types.is_function(p) {
             return Some(1); // GNU extension: sizeof(void) == 1
+        }
+        if self.types.is_vla(p) {
+            return Some(0); // stride computed at run time
         }
         match self.types.size_of(p) {
             Some(s) => Some(s),
@@ -1536,7 +1541,24 @@ impl<'a> Sema<'a> {
 
     // ───────────────────────────── casts / sizeof ─────────────────────────────
 
+    /// Run-time size computations of variable length array types named inside
+    /// an expression (`sizeof(int[n])`, `(int (*)[n])p`) are evaluated first.
+    pub(crate) fn wrap_vla_inits(&mut self, mark: usize, e: HExpr) -> HExpr {
+        if self.pending_vla.len() <= mark {
+            return e;
+        }
+        let inits = self.pending_vla.split_off(mark);
+        let (ty, span) = (e.ty, e.span);
+        inits.into_iter().rev().fold(e, |acc, i| HExpr::new(HExprKind::Comma(Box::new(i), Box::new(acc)), ty, span))
+    }
+
     fn cast_expr(&mut self, ty: &TypeName, operand: &Expr, span: Span) -> HExpr {
+        let mark = self.pending_vla.len();
+        let e = self.cast_expr_inner(ty, operand, span);
+        self.wrap_vla_inits(mark, e)
+    }
+
+    fn cast_expr_inner(&mut self, ty: &TypeName, operand: &Expr, span: Span) -> HExpr {
         let to = self.type_name(ty);
         let e = self.rexpr(operand);
         if Self::is_error(&e) {
@@ -1586,6 +1608,9 @@ impl<'a> Sema<'a> {
         let ul = self.types.p.ulong;
         if self.types.is_function(ty) || self.types.is_void(ty) {
             return self.int_lit(1, ul, span); // GNU extension
+        }
+        if self.types.is_vla(ty) {
+            return HExpr::new(HExprKind::VlaSizeof(ty), ul, span);
         }
         match self.types.size_of(ty) {
             Some(s) => self.int_lit(s, ul, span),

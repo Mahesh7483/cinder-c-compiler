@@ -218,9 +218,30 @@ fn struct_errors() {
 fn array_errors() {
     assert!(errors("int a[-1];")[0].contains("array size is negative"));
     assert!(errors("int n = 3; int a[n];")[0].contains("variable length array"));
-    assert!(errors("void f(void) { int n = 3; int a[n]; }")[0].contains("not yet supported: variable length arrays"));
+    // variable length arrays are supported in blocks, with restrictions
+    clean("void f(int n) { int a[n]; a[0] = 1; }");
+    assert!(errors("void f(int n) { static int a[n]; }")[0].contains("static storage duration"));
+    assert!(errors("void f(int n) { int a[n] = {1}; }")[0].contains("may not be initialized"));
+    assert!(errors("struct S { int a[sizeof(int)]; int b; }; int n; struct T { int a[n]; };")[0]
+        .contains("not allowed here"));
     assert!(errors("int f(void)[3];")[0].contains("function cannot return array type"));
     assert!(errors("int a[2.5];")[0].contains("non-integer"));
+}
+
+#[test]
+fn vla_sizeof_is_a_run_time_value_and_fixed_arrays_stay_constant() {
+    let d = dump("unsigned long f(int n) { int a[n]; int b[4]; return sizeof(a) + sizeof(b); }");
+    assert!(d.contains("VlaSizeof"), "{d}");
+    assert!(d.contains("VlaDecl"), "{d}");
+    // the fixed-size array is still folded to a literal
+    assert!(!d.contains("VlaDecl b"), "{d}");
+}
+
+#[test]
+fn vla_parameters_may_name_earlier_parameters() {
+    clean("int sum(int r, int c, int m[r][c]) { return m[r - 1][c - 1]; }");
+    clean("void fill(int n, int a[n]);");
+    clean("void g(int n, int (*p)[n]) { p[1][2] = 3; }");
 }
 
 #[test]

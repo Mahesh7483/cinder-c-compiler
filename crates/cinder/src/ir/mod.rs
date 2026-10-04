@@ -411,6 +411,19 @@ pub enum InstKind {
         variadic: bool,
         tail: bool,
     },
+    /// Dynamic stack allocation (variable length arrays): `size` bytes
+    /// (an `i64`), 16-byte aligned; the result is the address. Lives until
+    /// the stack is restored to an earlier `StackSave` (or the function returns).
+    DynAlloca {
+        size: Operand,
+        align: u32,
+    },
+    /// The current stack pointer, for a later `StackRestore`.
+    StackSave,
+    /// Release every `DynAlloca` made since the matching `StackSave`.
+    StackRestore {
+        ptr: Operand,
+    },
     /// Address of the register save area of a variadic function.
     VaRegSave,
     /// Address of the first stack-passed argument of the current function.
@@ -680,7 +693,13 @@ impl InstKind {
     /// Visit every operand.
     pub fn for_each_operand(&self, mut f: impl FnMut(Operand)) {
         match self {
-            InstKind::Alloca { .. } | InstKind::VaRegSave | InstKind::VaStackArgs | InstKind::Trap => {}
+            InstKind::Alloca { .. }
+            | InstKind::StackSave
+            | InstKind::VaRegSave
+            | InstKind::VaStackArgs
+            | InstKind::Trap => {}
+            InstKind::DynAlloca { size, .. } => f(*size),
+            InstKind::StackRestore { ptr } => f(*ptr),
             InstKind::Load { ptr, .. } => f(*ptr),
             InstKind::Store { val, ptr, .. } => {
                 f(*val);
@@ -724,7 +743,13 @@ impl InstKind {
     /// Mutably visit every operand (for rewriting uses).
     pub fn for_each_operand_mut(&mut self, mut f: impl FnMut(&mut Operand)) {
         match self {
-            InstKind::Alloca { .. } | InstKind::VaRegSave | InstKind::VaStackArgs | InstKind::Trap => {}
+            InstKind::Alloca { .. }
+            | InstKind::StackSave
+            | InstKind::VaRegSave
+            | InstKind::VaStackArgs
+            | InstKind::Trap => {}
+            InstKind::DynAlloca { size, .. } => f(size),
+            InstKind::StackRestore { ptr } => f(ptr),
             InstKind::Load { ptr, .. } => f(ptr),
             InstKind::Store { val, ptr, .. } => {
                 f(val);
@@ -772,6 +797,9 @@ impl InstKind {
             | InstKind::MemCopy { .. }
             | InstKind::MemSet { .. }
             | InstKind::Call { .. }
+            | InstKind::DynAlloca { .. }
+            | InstKind::StackSave
+            | InstKind::StackRestore { .. }
             | InstKind::Trap => true,
             InstKind::Load { volatile, .. } => *volatile,
             _ => false,
