@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/cinder"]
+members = ["crates/cinder", "crates/cinder-server"]
 
 [workspace.package]
 version = "0.1.0"
