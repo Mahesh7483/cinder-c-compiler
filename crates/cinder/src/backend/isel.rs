@@ -127,6 +127,7 @@ impl<'a> Isel<'a> {
             used_callee_saved: Vec::new(),
             frame_size: 0,
             dyn_alloca: false,
+            jump_tables: 0,
         };
         let nv = f.values.len();
         let mut s = Isel {
@@ -273,6 +274,32 @@ impl<'a> Isel<'a> {
                         self.needs_reg[x.idx()] = true;
                     }
                 }
+            }
+        }
+        // Address arithmetic used outside the block that computes it (typically hoisted out of
+        // a loop) is computed once into a register instead of being re-folded at every use.
+        let mut def_block: Vec<u32> = vec![u32::MAX; f.insts.len()];
+        for (bi, b) in f.blocks.iter().enumerate() {
+            for &id in &b.insts {
+                def_block[id.idx()] = bi as u32;
+            }
+        }
+        for (bi, b) in f.blocks.iter().enumerate() {
+            let check = |s: &mut Isel, o: Operand| {
+                if let Operand::Value(v) = o {
+                    if let Some(id) = f.def_inst(v) {
+                        if def_block[id.idx()] != bi as u32 && matches!(f.insts[id.idx()].kind, InstKind::PtrAdd { .. })
+                        {
+                            s.needs_reg[v.idx()] = true;
+                        }
+                    }
+                }
+            };
+            for &id in &b.insts {
+                f.insts[id.idx()].kind.for_each_operand(|o| check(self, o));
+            }
+            for o in b.term.operands() {
+                check(self, o);
             }
         }
         // Aliases: whoever needs the alias target needs it as a register too.

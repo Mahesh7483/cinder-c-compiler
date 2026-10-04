@@ -71,6 +71,24 @@ impl<'a> Emitter<'a> {
             }
         }
         let _ = writeln!(self.out, "\t.size {}, .-{}", name, name);
+        let mut tables: Vec<&JumpTable> = Vec::new();
+        for &b in layout {
+            for inst in &mf.blocks[b].insts {
+                if let Op::JmpTable(jt) = &inst.op {
+                    tables.push(jt);
+                }
+            }
+        }
+        if !tables.is_empty() {
+            self.out.push_str("\t.section .rodata\n");
+            for jt in tables {
+                self.out.push_str("\t.p2align 3\n");
+                let _ = writeln!(self.out, ".LJT{}_{}:", name, jt.id);
+                for t in &jt.targets {
+                    let _ = writeln!(self.out, "\t.quad .L{}_{}", name, t);
+                }
+            }
+        }
         if !mf.consts.is_empty() {
             self.out.push_str("\t.section .rodata\n");
             for (i, c) in mf.consts.iter().enumerate() {
@@ -296,6 +314,13 @@ impl<'a> Emitter<'a> {
                 self.leave_frame(mf);
                 format!("\tjmp {}\n", target)
             }
+            Op::JmpTable(jt) => {
+                let idx = match &i.src {
+                    MOp::Reg(r) => self.reg(r, Sz::Q),
+                    _ => unreachable!("jump table index must be in a register"),
+                };
+                format!("\tjmp *.LJT{}_{}(,{},8)\n", fname, jt.id, idx)
+            }
             Op::Ret => {
                 self.epilogue(mf);
                 return;
@@ -312,18 +337,22 @@ impl<'a> Emitter<'a> {
             Op::Ucomi => format!("\tucomi{} {}, {}\n", fsfx, s, d),
             Op::Xorps => format!("\txorps {}, {}\n", s, d),
             Op::CvtSi2F(src_sz) => {
+                // cvtsi2sd only writes the low lane, so it would depend on whatever the
+                // register held before (a loop-carried chain); clear it first
                 let src = self.operand(mf, fname, &i.src, *src_sz);
-                format!("\tcvtsi2{}{} {}, {}\n", fsfx, src_sz.suffix(), src, d)
+                format!("\txorps {}, {}\n\tcvtsi2{}{} {}, {}\n", d, d, fsfx, src_sz.suffix(), src, d)
             }
             Op::CvtF2Si(dst_sz) => {
                 let dst = self.operand(mf, fname, &i.dst, *dst_sz);
                 format!("\tcvtt{}2si {}, {}\n", fsfx, s, dst)
             }
             Op::CvtF2F => {
+                // same false dependency as cvtsi2sd, unless the source is the destination itself
+                let clear = if i.src == i.dst { String::new() } else { format!("\txorps {}, {}\n", d, d) };
                 if sz == Sz::Q {
-                    format!("\tcvtss2sd {}, {}\n", s, d)
+                    format!("{}\tcvtss2sd {}, {}\n", clear, s, d)
                 } else {
-                    format!("\tcvtsd2ss {}, {}\n", s, d)
+                    format!("{}\tcvtsd2ss {}, {}\n", clear, s, d)
                 }
             }
             Op::MovGX => format!("\tmov{} {}, {}\n", if sz == Sz::Q { 'q' } else { 'd' }, s, d),

@@ -256,6 +256,15 @@ pub struct CallInfo {
     pub defs: Vec<u8>,
 }
 
+/// A table of code addresses for a dense `switch` (`jmp *table(,%idx,8)`).
+#[derive(Clone, PartialEq, Debug)]
+pub struct JumpTable {
+    /// Unique within the function; names the table's label.
+    pub id: u32,
+    /// Block of each entry, in index order.
+    pub targets: Vec<usize>,
+}
+
 #[derive(Clone, PartialEq, Debug)]
 pub enum Op {
     // data movement
@@ -290,6 +299,8 @@ pub enum Op {
     Call(Box<CallInfo>),
     /// A call in tail position: restore the frame, then `jmp` to the target.
     TailCall(Box<CallInfo>),
+    /// Indirect jump through a table; the (zero-extended) index is in `src`.
+    JmpTable(Box<JumpTable>),
     Ret,
     Ud2,
     // scalar floating point (`sz` = L for single, Q for double)
@@ -373,8 +384,8 @@ fn dst_access(op: &Op) -> Option<Acc> {
         Add | Sub | And | Or | Xor | Imul | Neg | Not | Shl | Shr | Sar | CMov(_) | FAdd | FSub | FMul | FDiv
         | Xorps => Some(Acc::UseDef),
         Cmp | Test | Ucomi => Some(Acc::Use),
-        Idiv | Div | SignExtAccum | Jmp(_) | Jcc(..) | Call(_) | TailCall(_) | Ret | Ud2 | RepMovsb | RepStosb
-        | Loc(_) => None,
+        Idiv | Div | SignExtAccum | Jmp(_) | Jcc(..) | Call(_) | TailCall(_) | JmpTable(_) | Ret | Ud2 | RepMovsb
+        | RepStosb | Loc(_) => None,
     }
 }
 
@@ -440,7 +451,7 @@ impl MInst {
     }
 
     pub fn is_terminator(&self) -> bool {
-        matches!(self.op, Op::Jmp(_) | Op::Ret | Op::Ud2 | Op::TailCall(_))
+        matches!(self.op, Op::Jmp(_) | Op::Ret | Op::Ud2 | Op::TailCall(_) | Op::JmpTable(_))
     }
 }
 
@@ -487,6 +498,8 @@ pub struct MFunc {
     /// The function allocates stack memory at run time (VLAs): `%rsp` moves, so
     /// the frame reserves a 16-byte-rounded outgoing area below the locals.
     pub dyn_alloca: bool,
+    /// Jump tables created so far (the next one's id).
+    pub jump_tables: u32,
 }
 
 impl MFunc {

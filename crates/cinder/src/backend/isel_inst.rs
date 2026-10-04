@@ -629,6 +629,9 @@ impl<'a> Isel<'a> {
             Term::Switch { ty, val, cases, default } => {
                 let sz = Sz::of(*ty);
                 let v = self.reg(*val);
+                if self.jump_table(*ty, v, cases, default.idx()) {
+                    return;
+                }
                 for (c, target) in cases {
                     if i32::try_from(*c).is_ok() {
                         self.emit(Op::Cmp, sz, MOp::Reg(v), MOp::Imm(*c));
@@ -658,6 +661,34 @@ impl<'a> Isel<'a> {
             Term::Unreachable => self.emit_bare(Op::Ud2),
             Term::None => unreachable!("block without terminator"),
         }
+    }
+
+    /// Lower a dense `switch` to a bounds check and an indirect jump through a table.
+    /// Returns false (emitting nothing) when the cases are too few or too sparse.
+    fn jump_table(&mut self, ty: Type, v: Reg, cases: &[(i64, BlockId)], default: usize) -> bool {
+        if !matches!(ty, Type::I32 | Type::I64) || cases.len() < 4 {
+            return false;
+        }
+        let min = cases.iter().map(|c| c.0).min().unwrap();
+        let max = cases.iter().map(|c| c.0).max().unwrap();
+        let range = max as i128 - min as i128 + 1;
+        if range > 3 * cases.len() as i128 + 10 || range > 2048 || i32::try_from(min).is_err() {
+            return false;
+        }
+        let sz = Sz::of(ty);
+        let mut targets = vec![default; range as usize];
+        for (c, b) in cases {
+            targets[(*c as i128 - min as i128) as usize] = b.idx();
+        }
+        let idx = self.gpr_v();
+        self.emit(Op::Mov, sz, MOp::Reg(idx), MOp::Reg(v));
+        self.emit(Op::Sub, sz, MOp::Reg(idx), MOp::Imm(min));
+        self.emit(Op::Cmp, sz, MOp::Reg(idx), MOp::Imm(range as i64 - 1));
+        self.emit(Op::Jcc(Cc::A, default), Sz::Q, MOp::None, MOp::None);
+        let id = self.mf.jump_tables;
+        self.mf.jump_tables += 1;
+        self.emit(Op::JmpTable(Box::new(JumpTable { id, targets })), Sz::Q, MOp::None, MOp::Reg(idx));
+        true
     }
 
     fn cond_branch(&mut self, cond: Operand, t: usize, e: usize) {
