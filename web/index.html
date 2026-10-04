@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Cinder Playground</title>
+  <meta name="description" content="Write C, see the assembly, IR and AST, and run it: a C11 compiler written from scratch in Rust.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23e8590c'/%3E%3Cpath d='M9 22c0-7 7-8 7-14 4 3 7 6 7 11a7 7 0 0 1-14 3z' fill='%23fff'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-view="source">
+  <header class="topbar">
+    <div class="brand" title="Cinder: a C11 compiler written from scratch in Rust">
+      <svg viewBox="0 0 32 32" width="24" height="24" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#e8590c"/><path d="M9 22c0-7 7-8 7-14 4 3 7 6 7 11a7 7 0 0 1-14 3z" fill="#fff"/></svg>
+      <span class="brand-name">Cinder</span><span class="brand-sub">playground</span>
+    </div>
+
+    <label class="field">
+      <span class="sr-only">Example program</span>
+      <select id="examples" aria-label="Example programs"><option value="">Examples…</option></select>
+    </label>
+
+    <div class="seg" role="radiogroup" aria-label="Optimization level" id="opt-seg">
+      <button role="radio" data-opt="0" aria-checked="true" title="No optimization: every variable lives in memory">-O0</button>
+      <button role="radio" data-opt="1" aria-checked="false" title="mem2reg, constant propagation, CSE, DCE, CFG clean-up">-O1</button>
+      <button role="radio" data-opt="2" aria-checked="false" title="adds loop-invariant code motion, inlining and tail calls">-O2</button>
+    </div>
+
+    <div class="spacer"></div>
+
+    <button id="run" class="primary" title="Compile, link and run in the sandbox (Ctrl/Cmd+Enter)">
+      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 2l11 6-11 6z" fill="currentColor"/></svg>
+      <span>Run</span>
+    </button>
+    <button id="share" title="Copy a link that contains this program and settings">Share</button>
+    <button id="theme" title="Toggle light/dark theme" aria-label="Toggle theme">
+      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zm0 1.5v10a5 5 0 0 1 0-10z" fill="currentColor"/></svg>
+    </button>
+  </header>
+
+  <main id="panes" class="panes">
+    <section class="pane pane-source" aria-label="C source">
+      <div class="pane-head"><span class="pane-title">main.c</span><span class="hint">Ctrl/Cmd+Enter to run</span></div>
+      <div class="editor-host" id="source-host"></div>
+    </section>
+
+    <div class="splitter splitter-v" id="split-v" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize source and output panes"></div>
+
+    <div class="right">
+      <section class="pane pane-output" aria-label="Compiler output">
+        <div class="pane-head">
+          <div class="seg seg-small" role="tablist" aria-label="Output kind" id="emit-seg">
+            <button role="tab" data-emit="asm" aria-selected="true" title="x86-64 assembly (AT&amp;T syntax)">Assembly</button>
+            <button role="tab" data-emit="ir" aria-selected="false" title="SSA intermediate representation">IR</button>
+            <button role="tab" data-emit="ast" aria-selected="false" title="Syntax tree">AST</button>
+            <button role="tab" data-emit="hir" aria-selected="false" title="Typed tree with implicit conversions made explicit">Typed</button>
+            <button role="tab" data-emit="pp" aria-selected="false" title="Preprocessed source">Preprocessed</button>
+          </div>
+          <span class="hint" id="map-hint">click a line to link it with the source</span>
+        </div>
+        <div class="editor-host" id="output-host"></div>
+      </section>
+
+      <div class="splitter splitter-h" id="split-h" role="separator" aria-orientation="horizontal" tabindex="0" aria-label="Resize output and console panes"></div>
+
+      <section class="pane pane-console" aria-label="Program output and diagnostics">
+        <div class="pane-head">
+          <div class="seg seg-small" role="tablist" aria-label="Console" id="console-seg">
+            <button role="tab" data-tab="output" aria-selected="true">Output</button>
+            <button role="tab" data-tab="diag" aria-selected="false">Diagnostics <span class="badge" id="diag-badge" hidden>0</span></button>
+            <button role="tab" data-tab="stdin" aria-selected="false">Input</button>
+          </div>
+          <span class="hint" id="run-info"></span>
+        </div>
+        <div class="console-body">
+          <pre id="console-output" class="console-view" tabindex="0" aria-live="polite"><span class="muted">Press Run to compile and execute the program.</span></pre>
+          <div id="console-diag" class="console-view" hidden></div>
+          <div id="console-stdin" class="console-view" hidden>
+            <label for="stdin" class="muted">Text sent to the program's standard input:</label>
+            <textarea id="stdin" spellcheck="false" placeholder="(empty)"></textarea>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <nav class="tabbar" aria-label="Panes">
+    <button data-view="source" aria-pressed="true">Source</button>
+    <button data-view="output" aria-pressed="false">Compiler</button>
+    <button data-view="console" aria-pressed="false">Console</button>
+  </nav>
+
+  <footer class="statusbar">
+    <span id="status" role="status" aria-live="polite">Loading…</span>
+    <span class="spacer"></span>
+    <span id="server-info" class="muted"></span>
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
