@@ -301,17 +301,17 @@ pub fn init_text(l: &InitList) -> String {
 
 // ───────────────────────────── tree dump ─────────────────────────────
 
-struct Node {
-    label: String,
-    children: Vec<Node>,
+pub(crate) struct Node {
+    pub(crate) label: String,
+    pub(crate) children: Vec<Node>,
 }
 
 impl Node {
-    fn new(label: impl Into<String>) -> Node {
+    pub(crate) fn new(label: impl Into<String>) -> Node {
         Node { label: label.into(), children: Vec::new() }
     }
 
-    fn with(mut self, c: Node) -> Node {
+    pub(crate) fn with(mut self, c: Node) -> Node {
         self.children.push(c);
         self
     }
@@ -597,7 +597,7 @@ impl<'a> Dumper<'a> {
     }
 }
 
-fn render(n: &Node, prefix: &str, last: bool, root: bool, out: &mut String) {
+pub(crate) fn render(n: &Node, prefix: &str, last: bool, root: bool, out: &mut String) {
     if root {
         out.push_str(&n.label);
         out.push('\n');

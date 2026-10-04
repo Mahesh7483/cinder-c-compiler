@@ -71,6 +71,13 @@ warn_table! {
     UnknownEscape,               "unknown-escape-sequence", Default;
     Multichar,                   "multichar", Default;
     PpWarnings,                  "#warnings", Default;
+    ImplicitInt,                 "implicit-int", Default;
+    IntToPointerCast,            "int-to-pointer-cast", Default;
+    ExcessInitializers,          "excess-initializers", Default;
+    ConstantConversion,          "constant-conversion", Default;
+    ShiftCount,                  "shift-count-overflow", Default;
+    TentativeDefinition,         "tentative-definition-incomplete-type", Default;
+    ExternInitializer,           "extern-initializer", Default;
     UnusedVariable,              "unused-variable", All;
     UnusedFunction,              "unused-function", All;
     UnusedValue,                 "unused-value", All;

@@ -190,7 +190,7 @@ fn parse_hex_float(s: &str) -> Option<f64> {
 
 // ───────────────────────── character / string literals ─────────────────────────
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StrKind {
     /// No prefix: `char` elements.
     Plain,

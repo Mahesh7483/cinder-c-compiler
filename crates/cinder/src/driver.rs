@@ -126,12 +126,27 @@ fn compile_one(opts: &Options, input: &str, out: &mut dyn Write, err: &mut dyn W
         return i32::from(sess.diags.has_errors());
     }
 
-    if !sess.diags.has_errors() {
-        sess.diags.error(
-            crate::source::Span::DUMMY,
-            "semantic analysis and code generation are not yet supported (only -E and --emit-ast work so far)",
-        );
+    if sess.diags.has_errors() {
+        flush_diagnostics(&mut sess, opts, err);
+        return 1;
     }
+    let Some(hir) = crate::sema::analyze(&mut sess, &tu) else {
+        flush_diagnostics(&mut sess, opts, err);
+        return 1;
+    };
+    if opts.mode == Mode::Hir {
+        let text = crate::hir_dump::dump(&sess.sources, &hir);
+        if let Err(code) = write_output(opts, text.as_bytes(), out, err) {
+            return code;
+        }
+        flush_diagnostics(&mut sess, opts, err);
+        return 0;
+    }
+
+    sess.diags.error(
+        crate::source::Span::DUMMY,
+        "code generation is not yet supported (-E, --emit-ast and --emit-hir work so far)",
+    );
     flush_diagnostics(&mut sess, opts, err);
     1
 }
