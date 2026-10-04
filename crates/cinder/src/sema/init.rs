@@ -558,6 +558,12 @@ fn is_string_literal(e: &Expr) -> bool {
 impl<'a> Sema<'a> {
     /// Byte range covered by an entry.
     fn entry_range(&self, e: &InitEntry) -> (u64, u64) {
+        // a bit-field covers only the bytes its bits span, not its whole storage unit:
+        // otherwise a field in byte 1 of a 4-byte unit would "overlap" the next member at byte 4
+        if let Some(b) = e.bit {
+            let span = ((b.bit_offset % 8) + b.width as u64).div_ceil(8);
+            return (e.offset, e.offset + span.max(1));
+        }
         let len = match &e.value {
             InitValue::Bytes(b) => b.len() as u64,
             _ => self.types.size_of(e.ty).unwrap_or(1),

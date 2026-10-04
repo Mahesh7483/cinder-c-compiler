@@ -354,3 +354,31 @@ int main(void) {
 }
 //// stdout
 931 0
+//// case: decl_bitfield_initializers_before_ordinary_members
+#include <stdio.h>
+struct packet {
+    unsigned version : 3;
+    unsigned kind    : 5;
+    unsigned length  : 8;
+    union { int i; float f; char bytes[4]; } payload;
+};
+struct two { unsigned a : 3; unsigned b : 5; unsigned c : 8; int tail; };
+struct mixed { char head; unsigned x : 4; unsigned y : 12; short s; unsigned z : 7; long tail; };
+static struct two g = { 2, 17, 200, 9 };
+int main(void) {
+    struct packet p = { .version = 2, .kind = 17, .length = 200, .payload.f = 1.5f };
+    struct two t = { .a = 2, .b = 17, .c = 200, .tail = 9 };
+    struct two u = { 2, 17, 200, 9 };
+    struct two v = { .tail = 9, .c = 255, .a = 7 };
+    struct mixed m = { 'h', 9, 3000, -2, 100, 77 };
+    printf("%u %u %u %08x\n", p.version, p.kind, p.length, (unsigned)p.payload.i);
+    printf("%u %u %u %d | %u %u %u %d\n", t.a, t.b, t.c, t.tail, u.a, u.b, u.c, u.tail);
+    printf("%u %u %u %d | %u %u %u %d\n", v.a, v.b, v.c, v.tail, g.a, g.b, g.c, g.tail);
+    printf("%c %u %u %d %u %ld\n", m.head, m.x, m.y, m.s, m.z, m.tail);
+    return 0;
+}
+//// stdout
+2 17 200 3fc00000
+2 17 200 9 | 2 17 200 9
+7 0 255 9 | 2 17 200 9
+h 9 3000 -2 100 77

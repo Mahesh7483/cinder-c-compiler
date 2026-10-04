@@ -1182,3 +1182,15 @@ fn empty_if_body() {
     assert!(w.iter().any(|m| m == "if statement has empty body"), "{w:?}");
     assert!(!extra_warnings("int f(int a) { if (a) {} return 1; }").iter().any(|m| m.contains("empty body")));
 }
+
+#[test]
+fn bit_field_initializers_are_not_dropped_by_a_following_member() {
+    // regression: `c` lives in byte 1 of its 4-byte unit; `tail` starts at byte 4
+    let d = dump(
+        "struct two { unsigned a : 3; unsigned b : 5; unsigned c : 8; int tail; };
+void f(void) { struct two t = { 2, 17, 200, 9 }; (void)t; }",
+    );
+    assert_eq!(d.matches("IntLiteral").count(), 4, "{d}");
+    let d = dump("struct two { unsigned a : 3; unsigned b : 5; unsigned c : 8; int tail; };\nvoid f(void) { struct two t = { .c = 200, .a = 2, .tail = 9 }; (void)t; }");
+    assert_eq!(d.matches("IntLiteral").count(), 3, "{d}");
+}
