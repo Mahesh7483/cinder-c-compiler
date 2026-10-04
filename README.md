@@ -11,7 +11,7 @@ driver*. It does not wrap or reuse GCC, Clang or LLVM, and the compiler crate ha
 * A 10-pass SSA optimizer (`-O0` / `-O1` / `-O2`, each pass individually toggleable, IR verified after every pass)
 * A System V ABI backend (linear-scan register allocation) that interoperates with GCC-compiled code in both directions
 * **432 unit tests, 243 end-to-end programs run at three optimization levels, differential testing against GCC,**
-  random-program optimizer fuzzing, benchmarks, CI
+  random-program optimizer fuzzing, benchmarks
 * A web playground (Monaco editor, assembly/IR/AST views, source↔output highlighting, run with stdin, share links)
   backed by a sandboxed Rust server, deployable on Render from one Dockerfile
 
@@ -229,12 +229,12 @@ tests/e2e/*.cases         243 end-to-end programs      tests/diag/   diagnostic 
 tests/gen/abi.py          ABI interoperability test generator
 scripts/                  Docker dev loop, benchmark driver
 docs/                     one page per stage (+ sandbox, deploy, testing, roadmap)
-Dockerfile  render.yaml  .github/workflows/ci.yml
+Dockerfile  render.yaml
 ```
 
-CI (`.github/workflows/ci.yml`): build + test, fmt + clippy, differential vs GCC + fuzzing, benchmarks, minimum Rust
-(1.82) for the compiler crate, and the playground image (built, started, sandbox mode asserted, a program run, an
-infinite loop killed).
+There is no CI workflow in the repository. The checks it would run are plain commands, all listed in
+[docs/TESTING.md](docs/TESTING.md): build + test, fmt + clippy, differential testing against GCC, fuzzing, benchmarks,
+a Rust 1.82 build of the compiler crate, and building and probing the playground image.
 
 ## Documentation
 

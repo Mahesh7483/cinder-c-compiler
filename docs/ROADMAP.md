@@ -36,7 +36,6 @@ tests/
   bench/                      fib, sort, matmul, nbody, ...
 scripts/                      Docker dev loop, benchmark + diff-vs-gcc drivers
 docs/                         one page per compiler stage
-.github/workflows/ci.yml
 Dockerfile  render.yaml  README.md
 ```
 
@@ -84,7 +83,7 @@ Each milestone ends with: all tests green, results shown, one or more commits.
 
 | # | Milestone | Done when |
 |---|-----------|-----------|
-| M0 | Scaffolding: workspace, source map, diagnostics engine, Docker dev loop, CI skeleton | `cargo test` green on Windows + Linux container |
+| M0 | Scaffolding: workspace, source map, diagnostics engine, Docker dev loop | `cargo test` green on Windows + Linux container |
 | M1 | Lexer + preprocessor, `-E` | token/pp unit tests; `-E` output matches expectations |
 | M2 | Parser + AST, error recovery, `--emit-ast` | parses full-declarator torture tests; multi-error recovery tests |
 | M3 | Types + semantic analysis, warnings framework | type errors/warnings golden tests; layout tests vs. known SysV sizes |
@@ -93,7 +92,7 @@ Each milestone ends with: all tests green, results shown, one or more commits.
 | M6 | Optimizer passes, each toggleable; `-O1`/`-O2` | e2e identical at `-O0/-O1/-O2`; per-pass IR tests |
 | M7 | Language breadth: structs by value, varargs, floats, bit-fields, VLAs, `_Generic`, designated init | 200+ e2e tests, differential vs. GCC |
 | M8 | Diagnostic quality + `-Wall` warnings (unused, conversion, missing return, uninitialized) | diagnostic goldens |
-| M9 | Benchmarks, differential harness, CI complete | `-O0` vs `-O2` table in README |
+| M9 | Benchmarks, differential harness | `-O0` vs `-O2` table in README |
 | M10 | Server, sandbox, Monaco frontend, Dockerfile, `render.yaml`, docs, README | image builds; sandbox escape/limit tests pass |
 
 **Status:** M0–M10 are done.
@@ -103,7 +102,7 @@ Each milestone ends with: all tests green, results shown, one or more commits.
 | M6 | ten passes, `-f` toggles, verifier after every pass, e2e at three levels, differential fuzzing | [OPTIMIZER.md](OPTIMIZER.md) |
 | M7 | structs by value, varargs, floats, bit-fields, VLAs (incl. over-aligned locals), `_Generic`, designated initializers; ABI interop generator; 243 e2e programs | [SEMA.md](SEMA.md), [TESTING.md](TESTING.md) |
 | M8 | uninitialized-variable analysis, the remaining warnings, diagnostic goldens | [DIAGNOSTICS.md](DIAGNOSTICS.md) |
-| M9 | benchmarks, backend fixes found by them (xorps, loop rotation, jump tables), complete CI | [BENCHMARKS.md](BENCHMARKS.md) |
+| M9 | benchmarks, backend fixes found by them (xorps, loop rotation, jump tables) | [BENCHMARKS.md](BENCHMARKS.md) |
 | M10 | `cinder-server` with a layered sandbox, Monaco front end, Dockerfile, `render.yaml`, docs, README | [PLAYGROUND.md](PLAYGROUND.md), [SANDBOX.md](SANDBOX.md), [DEPLOY.md](DEPLOY.md) |
 
 M10 also hardened the compiler against hostile input (sparse static data is not materialized, macro expansion has a

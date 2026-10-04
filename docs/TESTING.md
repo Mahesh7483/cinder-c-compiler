@@ -1,8 +1,8 @@
 # Testing
 
 Everything below runs with a plain `cargo test --workspace` on Linux with `gcc` and `as` installed (the
-default Docker dev loop, the CI runners and the Docker build image all have them). CI runs it on every push
-(see `.github/workflows/ci.yml`).
+default Docker dev loop, GitHub-hosted runners and the Docker build image all have them). The repository ships no
+CI workflow, so run these commands yourself (or put them in the CI system of your choice): the full list is below.
 
 ```bash
 cargo test --workspace                          # unit + integration + e2e (-O0/-O1/-O2) + diagnostics + server
@@ -29,11 +29,11 @@ scripts/bench.sh                                # benchmarks (docs/BENCHMARKS.md
 | **end-to-end** | compile with the real binary, link, **run**, compare stdout and exit code — at `-O0`, `-O1` **and** `-O2` | `tests/e2e/*.cases`, `crates/cinder/tests/e2e.rs` | **243 programs × 3 levels** |
 | **differential vs. GCC** | the same programs through `gcc -O0`; outputs must be identical (also how the expectations are produced) | `CINDER_DIFF_GCC=1` | 243 programs |
 | **ABI interoperability** | generated functions with mixed int/float/struct/union/bit-field signatures; Cinder-compiled code calls GCC-compiled code and the reverse | `tests/gen/abi.py` → `tests/e2e/lang_abi.cases` (`gcc-file:`) | 12 programs |
-| **optimizer fuzzing** | random UB-free programs; Cinder at every level must agree with `gcc -O0`; a failure prints the seed and names the culprit pass by disabling passes one at a time | `crates/cinder/tests/fuzz_opt.rs` | 60 by default, 600 in CI |
+| **optimizer fuzzing** | random UB-free programs; Cinder at every level must agree with `gcc -O0`; a failure prints the seed and names the culprit pass by disabling passes one at a time | `crates/cinder/tests/fuzz_opt.rs` | 60 by default (`CINDER_FUZZ_N=600` for a long run) |
 | **IR verifier everywhere** | the verifier runs after lowering and after **every optimization pass** in test and debug builds; a pass that breaks SSA dominance, phi shape or types panics with the pass's name | `ir/verify.rs`, `opt/mod.rs` | all of the above |
 | **server** | the HTTP API and the sandbox against hostile programs (infinite loop, fork bomb, memory bombs, output flood, network, `setsid` escape, file access, includes of host files, rate limiting, queueing, cleanup) | `crates/cinder-server/src/**` (15) and `tests/api.rs` | 15 + 26 |
 | **benchmarks** | 9 programs at `-O0/-O1/-O2` vs GCC; each output is verified against `gcc -O0`, so it doubles as a correctness check on larger programs | `tests/bench/*.c`, `scripts/bench.sh` | 9 |
-| **container** | CI builds the production image, starts it, asserts `/api/health` reports the full sandbox, runs a program and kills an infinite loop through HTTP | `docker` job in CI | — |
+| **container** | build the production image, start it, check that `/api/health` reports the full sandbox, run a program and kill an infinite loop through HTTP (see below) | `Dockerfile` | manual |
 
 The e2e suite is organized by theme (`basics`, `types`, `structs`, `libc_and_varargs`, `programs*`,
 `optimizer`, `lang_decls`, `lang_exprs`, `lang_stmts`, `lang_vla`, `lang_libc`, `lang_abi`). The `programs`
@@ -44,6 +44,20 @@ life, big-number arithmetic, hash tables, matrix determinant and inverse, an n-b
 narrow types, shifts, `switch` fallthrough and Duff's device, `goto` out of loops, short-circuit evaluation,
 float conversions, division and modulo semantics, `char` signedness, VLAs, bit-fields, compound literals,
 designated initializers, `_Generic`, varargs with floats, and struct passing and returning in registers vs. memory.
+
+## Checking the playground image
+
+```bash
+docker build -t cinder-playground .
+docker run -d --name pg -p 8080:8080 cinder-playground
+curl -s localhost:8080/api/health        # "sandbox":"chroot+uid+seccomp+rlimits", "status":"ok"
+curl -s -X POST localhost:8080/api/run -H 'content-type: application/json' \
+  -d '{"code":"int main(void){for(;;);}","optLevel":0,"stdin":""}'     # "signal":"SIGXCPU" after ~2 s
+docker rm -f pg
+```
+
+The minimum supported Rust version of the compiler crate (no dependencies) is checked with
+`cargo +1.82 build -p cinder && cargo +1.82 test -p cinder --lib`; the server crate needs a current toolchain.
 
 ## The e2e case format
 

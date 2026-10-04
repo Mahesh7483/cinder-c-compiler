@@ -6,9 +6,9 @@ a Blueprint, [`render.yaml`](../render.yaml), that describes that service, so yo
 clicks or create the service by hand — both are below.
 
 > **Status of this guide.** The image, the health check and the sandbox were tested locally with Docker's default
-> security profile (the same one GitHub Actions uses; CI builds the image and asserts the sandbox mode on every
-> push). It has not been run on Render itself from this repository: step 4 below tells you how to confirm in
-> thirty seconds that Render's runtime supports the full sandbox, and what to do if it does not. Dashboard labels
+> security profile (the same one GitHub Actions runners use). It has not been run on Render itself from this
+> repository: the "Verify the deployment" section below tells you how to confirm in thirty seconds that Render's
+> runtime supports the full sandbox, and what to do if it does not. Dashboard labels
 > are quoted from Render's documentation and may be reworded over time.
 
 ## 0. What you need

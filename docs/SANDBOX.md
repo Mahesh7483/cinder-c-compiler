@@ -70,9 +70,9 @@ program through the real code path (`api::probe`) and settles on the strongest m
 
 A **root server never falls back to running programs as root**: the weakest root mode is `uid+...` and if
 that fails too, running is disabled. The Docker image sets `SANDBOX=require`, which only accepts the full
-mode, so a deployment cannot silently run with less than the documented isolation. CI builds the image,
-starts it, and asserts that `/api/health` reports `chroot+uid+seccomp+rlimits`, that a normal program runs
-and that an infinite loop is killed.
+mode, so a deployment cannot silently run with less than the documented isolation. After building the image,
+check that `/api/health` reports `chroot+uid+seccomp+rlimits`, that a normal program runs and that an infinite
+loop is killed (the commands are in [TESTING.md](TESTING.md)).
 
 ## What the tests cover
 
