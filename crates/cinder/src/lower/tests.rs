@@ -619,3 +619,28 @@ fn annotated_ir_carries_source_lines() {
     // the plain printer is unchanged
     assert!(!crate::ir::print::print_module(&m).contains("; L"));
 }
+
+#[test]
+fn sparse_initializers_of_huge_objects_do_not_materialize_the_gaps() {
+    // 800 MB and 400 MB objects with a handful of initialized bytes: must be laid out in microseconds
+    let (m, _) = build("int a[200000000] = { 1, 2, 3 }; int b[100000000] = { [99999999] = 7 }; int c[100000000] = { [10] = 1, [50000000] = 2, [99999999] = 3 };");
+    let sizes = |name: &str| -> (u64, Vec<(bool, u64)>) {
+        let d = data(&m, name);
+        let items = d.items.iter().map(|i| match i {
+            DataItem::Bytes(b) => (false, b.len() as u64),
+            DataItem::Zero(n) => (true, *n),
+            DataItem::Addr { .. } => (false, 8),
+        });
+        (d.size, items.collect())
+    };
+    for name in ["a", "b", "c"] {
+        let (size, items) = sizes(name);
+        assert_eq!(items.iter().map(|i| i.1).sum::<u64>(), size, "{name}: items must cover the object exactly");
+        assert!(
+            items.iter().filter(|i| !i.0).map(|i| i.1).sum::<u64>() < 64,
+            "{name}: only the initialized bytes are materialized"
+        );
+    }
+    assert_eq!(sizes("a").1, vec![(false, 12), (true, 799_999_988)]);
+    assert_eq!(sizes("b").1, vec![(true, 399_999_996), (false, 4)]);
+}

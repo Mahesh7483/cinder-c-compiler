@@ -43,6 +43,10 @@ impl ModBuilder {
     }
 
     /// Lay a constant initializer plan out as bytes plus relocations.
+    ///
+    /// The object may be huge while its initializer is tiny (`int a[1 << 28] = { 1 }`), so the
+    /// bytes are materialized only for *clusters* of entries; the gaps between clusters become
+    /// `Zero` items without ever being allocated.
     pub(super) fn plan_to_data(
         &mut self,
         hir: &HirModule,
@@ -51,54 +55,103 @@ impl ModBuilder {
         align: u64,
         readonly: bool,
     ) -> DataDef {
-        let mut buf = vec![0u8; size as usize];
-        let mut relocs: Vec<(usize, SymId, i64)> = Vec::new();
-        for e in &plan.entries {
-            let off = e.offset as usize;
+        // entries closer together than this share one buffer
+        const GAP: u64 = 4096;
+        let extent = |e: &crate::hir::InitEntry| -> u64 {
             match &e.value {
-                InitValue::Const(ConstVal::Int(v)) => {
-                    if let Some(b) = e.bit {
-                        put_bits(&mut buf, b.bit_offset + (e.offset - b.bit_offset / 8) * 8, b.width, *v);
-                    } else {
-                        let sz = hir.types.size_of(e.ty).unwrap_or(8) as usize;
-                        put_le(&mut buf, off, sz, *v);
-                    }
-                }
-                InitValue::Const(ConstVal::Float(f)) => {
+                InitValue::Const(ConstVal::Int(_)) => match e.bit {
+                    Some(b) => ((b.bit_offset % 8) + b.width as u64).div_ceil(8).max(1),
+                    None => hir.types.size_of(e.ty).unwrap_or(8).min(8),
+                },
+                InitValue::Const(ConstVal::Float(_)) => {
                     if matches!(hir.types.kind(e.ty), TyKind::Float) {
-                        put_le(&mut buf, off, 4, (*f as f32).to_bits() as u64);
+                        4
                     } else {
-                        put_le(&mut buf, off, 8, f.to_bits());
+                        8
                     }
                 }
-                InitValue::Const(ConstVal::Addr { base, offset }) => {
-                    let sym = match base {
-                        AddrBase::Global(s) => self.sym(hir, *s),
-                        AddrBase::Str(s) => self.str_sym(hir, *s),
-                    };
-                    relocs.push((off, sym, *offset));
-                }
-                InitValue::Bytes(b) => {
-                    let end = (off + b.len()).min(buf.len());
-                    buf[off..end].copy_from_slice(&b[..end - off]);
-                }
-                InitValue::Expr(_) => unreachable!("static initializers are constant-folded by sema"),
+                InitValue::Const(ConstVal::Addr { .. }) => 8,
+                InitValue::Bytes(b) => b.len() as u64,
+                InitValue::Expr(_) => 0,
             }
-        }
-        relocs.sort_by_key(|r| r.0);
+        };
+        let mut order: Vec<usize> = (0..plan.entries.len()).collect();
+        order.sort_by_key(|&i| plan.entries[i].offset); // stable: same-offset bit-fields keep their order
+
         let mut items: Vec<DataItem> = Vec::new();
-        let mut pos = 0usize;
-        for (off, sym, addend) in &relocs {
-            push_bytes(&mut items, &buf[pos..*off]);
-            items.push(DataItem::Addr { sym: *sym, offset: *addend });
-            pos = off + 8;
+        let mut all_zero = true;
+        let mut pos = 0u64; // everything below `pos` has been emitted
+        let mut k = 0;
+        while k < order.len() {
+            // grow a cluster [lo, hi)
+            let lo = plan.entries[order[k]].offset.min(size);
+            let mut hi = lo;
+            let mut end = k;
+            while end < order.len() {
+                let e = &plan.entries[order[end]];
+                if end > k && e.offset > hi + GAP {
+                    break;
+                }
+                hi = hi.max((e.offset + extent(e)).min(size));
+                end += 1;
+            }
+            let mut buf = vec![0u8; (hi - lo) as usize];
+            let mut relocs: Vec<(usize, SymId, i64)> = Vec::new();
+            for &i in &order[k..end] {
+                let e = &plan.entries[i];
+                let off = (e.offset - lo) as usize;
+                match &e.value {
+                    InitValue::Const(ConstVal::Int(v)) => {
+                        if let Some(b) = e.bit {
+                            put_bits(&mut buf, off as u64 * 8 + b.bit_offset % 8, b.width, *v);
+                        } else {
+                            let sz = hir.types.size_of(e.ty).unwrap_or(8) as usize;
+                            put_le(&mut buf, off, sz, *v);
+                        }
+                    }
+                    InitValue::Const(ConstVal::Float(f)) => {
+                        if matches!(hir.types.kind(e.ty), TyKind::Float) {
+                            put_le(&mut buf, off, 4, (*f as f32).to_bits() as u64);
+                        } else {
+                            put_le(&mut buf, off, 8, f.to_bits());
+                        }
+                    }
+                    InitValue::Const(ConstVal::Addr { base, offset }) => {
+                        let sym = match base {
+                            AddrBase::Global(s) => self.sym(hir, *s),
+                            AddrBase::Str(s) => self.str_sym(hir, *s),
+                        };
+                        relocs.push((off, sym, *offset));
+                    }
+                    InitValue::Bytes(b) => {
+                        let end = (off + b.len()).min(buf.len());
+                        buf[off..end].copy_from_slice(&b[..end - off]);
+                    }
+                    InitValue::Expr(_) => unreachable!("static initializers are constant-folded by sema"),
+                }
+            }
+            relocs.sort_by_key(|r| r.0);
+            if lo > pos {
+                items.push(DataItem::Zero(lo - pos));
+            }
+            let mut at = 0usize;
+            for (off, sym, addend) in &relocs {
+                push_bytes(&mut items, &buf[at..*off]);
+                items.push(DataItem::Addr { sym: *sym, offset: *addend });
+                at = off + 8;
+            }
+            push_bytes(&mut items, &buf[at.min(buf.len())..]);
+            all_zero &= relocs.is_empty() && buf.iter().all(|&b| b == 0);
+            pos = hi;
+            k = end;
         }
-        push_bytes(&mut items, &buf[pos.min(buf.len())..]);
-        let zero = relocs.is_empty() && buf.iter().all(|&b| b == 0);
-        if zero {
+        if pos < size {
+            items.push(DataItem::Zero(size - pos));
+        }
+        if all_zero {
             items.clear();
         }
-        DataDef { size, align, items, readonly: readonly && !zero, zero }
+        DataDef { size, align, items, readonly: readonly && !all_zero, zero: all_zero }
     }
 
     /// The data symbol of a string literal (created once).
