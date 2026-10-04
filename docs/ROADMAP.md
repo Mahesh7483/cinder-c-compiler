@@ -96,9 +96,23 @@ Each milestone ends with: all tests green, results shown, one or more commits.
 | M9 | Benchmarks, differential harness, CI complete | `-O0` vs `-O2` table in README |
 | M10 | Server, sandbox, Monaco frontend, Dockerfile, `render.yaml`, docs, README | image builds; sandbox escape/limit tests pass |
 
-**Status:** M0–M6 are done (M6: all ten passes, `-f` toggles, verifier after
-every pass, unit tests, e2e at three levels, differential fuzzing; see
-[OPTIMIZER.md](OPTIMIZER.md)). M7 onwards is in progress.
+**Status:** M0–M10 are done.
+
+| # | what landed | where to read |
+|---|-------------|---------------|
+| M6 | ten passes, `-f` toggles, verifier after every pass, e2e at three levels, differential fuzzing | [OPTIMIZER.md](OPTIMIZER.md) |
+| M7 | structs by value, varargs, floats, bit-fields, VLAs (incl. over-aligned locals), `_Generic`, designated initializers; ABI interop generator; 243 e2e programs | [SEMA.md](SEMA.md), [TESTING.md](TESTING.md) |
+| M8 | uninitialized-variable analysis, the remaining warnings, diagnostic goldens | [DIAGNOSTICS.md](DIAGNOSTICS.md) |
+| M9 | benchmarks, backend fixes found by them (xorps, loop rotation, jump tables), complete CI | [BENCHMARKS.md](BENCHMARKS.md) |
+| M10 | `cinder-server` with a layered sandbox, Monaco front end, Dockerfile, `render.yaml`, docs, README | [PLAYGROUND.md](PLAYGROUND.md), [SANDBOX.md](SANDBOX.md), [DEPLOY.md](DEPLOY.md) |
+
+M10 also hardened the compiler against hostile input (sparse static data is not materialized, macro expansion has a
+token budget) and fixed a bit-field initializer bug that the playground examples exposed.
+
+**Ideas beyond the brief** (not started): induction-variable strength reduction and phi coalescing (the biggest
+remaining gaps in the benchmark table), inlining `sqrt`/`fabs`, live-range splitting in the register allocator,
+`long double`, `_Atomic`/threads, more bundled headers (`signal.h`, `setjmp.h`, `wchar.h`), macro-expansion backtraces
+in diagnostics, DWARF debug info.
 
 **Deliberate deviation from the brief's ordering:** the brief lists
 "optimizations" before "backend". I build the backend first (M5) and the
@@ -114,7 +128,7 @@ everything that builds a binary or runs tests happens in a Linux x86-64
 container (`rust:1-slim-bookworm`, which ships `gcc`, `as`, `ld`):
 
 ```
-bash scripts/dev-up.sh                  # start the container (once)
-bash scripts/dx.sh "cargo test"         # run anything inside it, in /work
-bash scripts/dx.sh "cargo clippy --all-targets -- -D warnings"
+bash scripts/dev-up.sh                  # start the container (once; uses `docker run --init`, see TESTING.md)
+bash scripts/dx.sh "cargo test --workspace"   # run anything inside it, in /work
+bash scripts/dx.sh "cargo clippy --workspace --all-targets -- -D warnings"
 ```

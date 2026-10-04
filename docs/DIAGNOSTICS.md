@@ -77,7 +77,7 @@ It follows control flow precisely where that avoids false positives:
 * after a label (a `goto` may arrive from anywhere) everything is assumed initialized;
 * arrays, structs/unions, `volatile` variables and parameters are not tracked.
 
-It produced no reports on any of the 242 programs in the end-to-end suite, which
+It produced no reports on any of the 243 programs in the end-to-end suite, which
 read plenty of variables assigned in loops, branches and through pointers.
 
 ## Tests
