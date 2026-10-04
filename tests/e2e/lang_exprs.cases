@@ -1,0 +1,407 @@
+//// case: expr_precedence_and_associativity
+#include <stdio.h>
+int main(void) {
+    int a = 2, b = 3, c = 4, d = 5;
+    printf("%d %d %d %d\n", a + b * c, (a + b) * c, a - b - c, a * b % c);
+    printf("%d %d %d %d\n", a << 1 + 1, a < b == c > d, a & b | c ^ d, !a + ~b);
+    printf("%d %d %d\n", a ? b : c ? d : 0, a || b && c, -a * -b);
+    printf("%d %d %d %d\n", 10 / 3 * 3, 10 % 4 * 2, 1 + 2 << 3, 100 >> 2 + 1);
+    int x = (a = 5, b = a + 1, b * 2);
+    printf("%d %d %d\n", x, a, b);
+    int y, z;
+    y = z = 7;
+    y += z -= 3;
+    printf("%d %d\n", y, z);
+    return 0;
+}
+//// stdout
+14 20 -5 2
+8 0 3 -4
+3 1 6
+9 4 24 12
+12 5 6
+11 4
+//// case: expr_usual_arithmetic_conversions
+#include <stdio.h>
+int main(void) {
+    int i = -1;
+    unsigned u = 1;
+    long l = -1;
+    unsigned long ul = 1;
+    char c = -1;
+    unsigned char uc = 255;
+    short s = -2;
+    printf("%d %d %d\n", i < u, l < ul, c < uc);
+    printf("%d %d %d\n", (int)sizeof(c + c), (int)sizeof(uc + 1L), (int)sizeof(s * 1u));
+    printf("%d %d\n", uc + 1, c + uc);
+    printf("%u %lu\n", i + u, l + ul);
+    printf("%d %d\n", (unsigned char)(uc + 1), (signed char)(uc));
+    printf("%d %d %d\n", -1 > 0u, -1L > 0u, -1 > 0ul);
+    printf("%.2f %.2f %.2f\n", 1 / 2.0, 1 / 2 + 0.5, (float)1 / 3);
+    printf("%d %d\n", (short)40000, (int)(char)200);
+    long long ll = 1LL << 40;
+    printf("%lld %d %d\n", ll, (int)ll, (int)(ll >> 38));
+    return 0;
+}
+//// stdout
+0 0 1
+4 8 4
+256 254
+0 0
+0 -1
+1 0 1
+0.50 0.50 0.33
+-25536 -56
+1099511627776 0 4
+//// case: expr_integer_promotions_and_narrow_arithmetic
+#include <stdio.h>
+int main(void) {
+    unsigned char a = 200, b = 100;
+    signed char s = 100, t = 100;
+    unsigned short us = 65535;
+    printf("%d %d %d\n", a + b, s + t, us + 1);
+    printf("%d %d\n", ~a, ~us);
+    unsigned char r = a + b;
+    signed char q = s + t;
+    printf("%d %d\n", r, q);
+    a += 100;
+    s += 100;
+    us++;
+    printf("%d %d %d\n", a, s, us);
+    char c = 'x';
+    c -= 'a' - 'A';
+    printf("%c %d\n", c, c << 4);
+    short m = 32767;
+    m++;
+    printf("%d\n", m);
+    unsigned char sh = 1;
+    sh <<= 7;
+    printf("%d %d\n", sh, sh << 1);
+    return 0;
+}
+//// stdout
+300 200 65536
+-201 -65536
+44 -56
+44 -56 0
+X 1408
+-32768
+128 256
+//// case: expr_shifts_and_bitwise
+#include <stdio.h>
+int main(void) {
+    int n = -8;
+    unsigned u = 0x80000001u;
+    long long big = -1LL;
+    printf("%d %d %u %u\n", n >> 1, n >> 3, u >> 1, u >> 31);
+    printf("%d %u %lld %llu\n", 1 << 10, 1u << 31, 1LL << 40, (unsigned long long)big >> 60);
+    printf("%x %x %x %x\n", 0xf0f0 & 0xff00, 0xf0f0 | 0x0f0f, 0xf0f0 ^ 0xffff, ~0xf0f0 & 0xffff);
+    int bits = 0;
+    for (unsigned v = 0xdeadbeef; v; v &= v - 1) bits++;
+    printf("%d\n", bits);
+    for (int i = 0; i < 8; i++) printf("%d", (0xa5 >> i) & 1);
+    printf("\n");
+    int k = 5;
+    printf("%d %d %d\n", 1 << k, 0x100 >> k, (1 << k) - 1);
+    return 0;
+}
+//// stdout
+-4 -1 1073741824 1
+1024 2147483648 1099511627776 15
+f000 ffff f0f f0f
+24
+10100101
+32 8 31
+//// case: expr_increment_decrement_forms
+#include <stdio.h>
+int main(void) {
+    int a = 5;
+    int b = a++;
+    b += a++;
+    int c = ++a + 1;
+    printf("%d %d %d\n", a, b, c);
+    int arr[4] = {10, 20, 30, 40};
+    int *p = arr;
+    int x = *p++;
+    int y = *++p;
+    int z = (*p)++;
+    printf("%d %d %d %d %d\n", x, y, z, arr[2], (int)(p - arr));
+    double d = 1.5;
+    d++;
+    --d;
+    d += 0.25;
+    float f = 2;
+    f *= 1.5f;
+    printf("%.2f %.2f\n", d, f);
+    char s[] = "abc";
+    char *q = s;
+    q++;
+    (*q)++;
+    printf("%s %d\n", s, (int)(q - s));
+    unsigned char uc = 255;
+    uc++;
+    printf("%d\n", uc);
+    return 0;
+}
+//// stdout
+8 11 9
+10 30 30 31 2
+1.75 3.00
+acc 1
+0
+//// case: expr_pointer_arithmetic_and_comparison
+#include <stdio.h>
+struct S { int a; char b; double c; };
+int main(void) {
+    int a[10];
+    for (int i = 0; i < 10; i++) a[i] = i * 11;
+    int *p = &a[2], *q = &a[7];
+    printf("%d %d %d %d\n", (int)(q - p), *(p + 3), p[4], *(q - 2));
+    printf("%d %d %d %d\n", p < q, p == q, p >= q, p != &a[2]);
+    struct S s[3];
+    struct S *sp = s;
+    printf("%d %d %d\n", (int)((char *)(sp + 2) - (char *)sp), (int)(&s[2] - &s[0]), (int)sizeof(struct S));
+    char *cp = (char *)a;
+    printf("%d %d\n", *(int *)(cp + 8), (int)((cp + 20) - cp));
+    int *np = 0;
+    printf("%d %d %d\n", np == 0, !np, np == NULL);
+    p += 2;
+    q -= 3;
+    printf("%d %d %ld\n", *p, *q, (long)(q - p));
+    int (*pa)[10] = &a;
+    printf("%d %d\n", (*pa)[9], (int)(*(pa + 1) - *pa));
+    return 0;
+}
+//// stdout
+5 55 66 55
+1 0 0 0
+32 2 16
+22 20
+1 1 1
+44 44 0
+99 10
+//// case: expr_array_decay_and_sizeof
+#include <stdio.h>
+static int sz(int a[10]) { return (int)sizeof(a); }
+static int sz2(int (*a)[10]) { return (int)sizeof(*a); }
+int main(void) {
+    int a[10];
+    int m[3][5];
+    char s[] = "hello";
+    printf("%d %d %d %d\n", (int)sizeof(a), sz(a), sz2(&a), (int)sizeof(m));
+    printf("%d %d %d %d\n", (int)sizeof(m[0]), (int)sizeof(m[0][0]), (int)sizeof(s), (int)sizeof(&s));
+    printf("%d %d %d\n", (int)(sizeof(a) / sizeof(a[0])), (int)sizeof(a + 1), (int)sizeof(*a));
+    printf("%d %d\n", (int)sizeof(int[7]), (int)sizeof(char *[4]));
+    printf("%d %d\n", (int)sizeof 1, (int)sizeof(1 + 1.0));
+    int i = 0;
+    int z = (int)sizeof(i++);
+    printf("%d %d\n", z, i);
+    return 0;
+}
+//// stdout
+40 8 40 60
+20 4 6 8
+10 8 4
+28 32
+4 8
+4 0
+//// case: expr_short_circuit_and_conditional
+#include <stdio.h>
+static int n;
+static int tick(int v) { n++; return v; }
+int main(void) {
+    int a = tick(0) && tick(1);
+    int b = tick(1) || tick(1);
+    int c = tick(1) && tick(0) || tick(1);
+    int d = tick(0) ? tick(5) : tick(6);
+    printf("%d %d %d %d %d\n", a, b, c, d, n);
+    int *p = 0;
+    if (p && *p > 3) printf("deref\n"); else printf("safe\n");
+    int x = 5;
+    int y = x > 3 ? x < 10 ? 1 : 2 : 3;
+    printf("%d\n", y);
+    double e = x ? 1 : 2.5;
+    printf("%.1f %d\n", e, (x ? 'a' : 0));
+    long l = 1 ? -1 : 0u;
+    printf("%ld\n", l);
+    return 0;
+}
+//// stdout
+0 1 1 6 7
+safe
+1
+1.0 97
+4294967295
+//// case: expr_compound_assignment_conversions
+#include <stdio.h>
+int main(void) {
+    int i = 10;
+    i += 2.7;
+    i -= 0.5;
+    printf("%d\n", i);
+    unsigned char u = 250;
+    u += 10;
+    u *= 2;
+    printf("%d\n", u);
+    short s = 1000;
+    s *= 100;
+    printf("%d\n", s);
+    double d = 7;
+    d /= 2;
+    d -= 1;
+    printf("%.2f\n", d);
+    int j = 17;
+    j /= 2.0;
+    j %= 5;
+    j <<= 3;
+    j >>= 1;
+    j |= 3;
+    j &= ~1;
+    j ^= 0xf;
+    printf("%d\n", j);
+    float f = 1;
+    f /= 3;
+    f *= 3;
+    printf("%.4f %d\n", f, f == 1.0f);
+    long l = 1;
+    l <<= 40;
+    l += 5;
+    printf("%ld\n", l);
+    char c = 'a';
+    c += 1.9;
+    printf("%c\n", c);
+    return 0;
+}
+//// stdout
+11
+8
+-31072
+2.50
+1
+1.0000 1
+1099511627781
+b
+//// case: expr_float_conversions
+#include <stdio.h>
+#include <math.h>
+int main(void) {
+    printf("%d %d %d %d\n", (int)3.99, (int)-3.99, (int)0.5, (int)-0.5);
+    printf("%u %ld %lu\n", (unsigned)3000000000.0, (long)-1e18, (unsigned long)1.8e19);
+    printf("%.1f %.1f %.1f\n", (double)3, (double)-5L, (double)18446744073709551615UL);
+    printf("%.2f %.2f\n", (float)0.1, (double)(float)0.1);
+    printf("%d %d %d\n", (char)-100.9, (unsigned char)255.9, (short)-32768.5);
+    double inf = INFINITY, nan = NAN;
+    printf("%d %d %d %d\n", inf > 1e308, -inf < -1e308, nan == nan, nan != nan);
+    printf("%.0f %.0f %.0f %.0f\n", floor(-2.5), ceil(-2.5), round(2.5), trunc(-2.7));
+    unsigned long big = 9223372036854775808UL;
+    printf("%.1f %.1f\n", (double)big, (double)(big + 4096));
+    float f = 16777216.0f;
+    printf("%.1f %.1f %d\n", f + 1.0f, (double)f + 1.0, (int)(f + 1.0f));
+    printf("%g %g %g\n", 1e-5, 123456789.0, 0.0001);
+    printf("%e %f\n", 12345.6789, 1e10);
+    return 0;
+}
+//// stdout
+3 -3 0 0
+3000000000 -1000000000000000000 18000000000000000000
+3.0 -5.0 18446744073709551616.0
+0.10 0.10
+-100 255 -32768
+1 1 0 1
+-3 -2 3 -2
+9223372036854775808.0 9223372036854779904.0
+16777216.0 16777217.0 16777216
+1e-05 1.23457e+08 0.0001
+1.234568e+04 10000000000.000000
+//// case: expr_comma_and_void_casts
+#include <stdio.h>
+int main(void) {
+    int i, j;
+    for (i = 0, j = 10; i < j; i += 3, j -= 2) printf("%d,%d ", i, j);
+    printf("\n");
+    int x = (1, 2, 3);
+    (void)x;
+    (void)printf("%d\n", x);
+    int y = (x++, x++, x);
+    printf("%d %d\n", x, y);
+    return 0;
+}
+//// stdout
+0,10 3,8 
+3
+5 5
+//// case: expr_division_modulo_semantics
+#include <stdio.h>
+#include <limits.h>
+int main(void) {
+    printf("%d %d %d %d\n", 7 / 2, -7 / 2, 7 / -2, -7 / -2);
+    printf("%d %d %d %d\n", 7 % 3, -7 % 3, 7 % -3, -7 % -3);
+    printf("%u %u\n", 7u / 2u, 4294967295u % 10u);
+    printf("%ld %ld\n", -9000000000000L / 7, -9000000000000L % 7);
+    printf("%d %d\n", INT_MIN / 2, INT_MIN % 3);
+    long long a = LLONG_MIN;
+    printf("%lld %lld\n", a / 2, a % 10);
+    unsigned long long b = 18446744073709551615ull;
+    printf("%llu %llu\n", b / 3, b % 1000);
+    int d = 3;
+    printf("%d %d %d\n", 100 / d, -100 / d, 100 % d);
+    return 0;
+}
+//// stdout
+3 -3 -3 3
+1 -1 1 -1
+3 5
+-1285714285714 -2
+-1073741824 -2
+-4611686018427387904 -8
+6148914691236517205 615
+33 -33 1
+//// case: expr_bool_conversions
+#include <stdio.h>
+#include <stdbool.h>
+int main(void) {
+    bool a = 256, b = -1, c = 0.1, d = 0.0, e = (void *)0;
+    int x = 3;
+    bool f = &x;
+    _Bool g = (char)256;
+    printf("%d %d %d %d %d %d %d\n", a, b, c, d, e, f, g);
+    bool h = true;
+    h++;
+    h += 5;
+    printf("%d %d\n", h, !h);
+    printf("%d %d %d\n", true + true, (int)sizeof(true), false);
+    int arr[3] = {0, 5, 0};
+    int count = 0;
+    for (int i = 0; i < 3; i++) count += !!arr[i];
+    printf("%d\n", count);
+    return 0;
+}
+//// stdout
+1 1 1 0 0 1 0
+1 0
+2 4 0
+1
+//// case: expr_char_signedness_and_literals
+#include <stdio.h>
+int main(void) {
+    char c = 200;
+    unsigned char u = 200;
+    signed char s = 200;
+    printf("%d %d %d\n", c, u, s);
+    printf("%d %d\n", c == 200, u == 200);
+    char neg = '\377';
+    printf("%d %d\n", neg, neg < 0);
+    int x = 'ab';
+    printf("%d\n", x);
+    char buf[4] = {65, 66, 67, 0};
+    printf("%s %c %d\n", buf, buf[1] + 1, buf[2] - 'A');
+    printf("%d %d %d\n", 'a' < 'b', '0' + 5, "xyz"[1]);
+    return 0;
+}
+//// stdout
+-56 200 -56
+0 1
+-1 1
+24930
+ABC C 2
+1 53 121

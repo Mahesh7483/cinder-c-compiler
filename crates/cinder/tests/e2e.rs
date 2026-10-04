@@ -20,6 +20,9 @@
 //!   `flags: <args>`       extra compiler flags
 //!   `expect-error: <txt>` the compile must fail and its diagnostics contain <txt>
 //!   `skip-gcc`            do not cross-check this case against GCC
+//!   `file: <name.c>`      starts an extra source file, compiled by cinder and linked in
+//!   `gcc-file: <name.c>`  starts an extra source file compiled by `gcc -O2` and linked in
+//!                         (ABI interoperability: the main source and these call each other)
 //!   `min-opt: <n>`        only run at -O<n> and above (GCC's reference build uses -O<n> too);
 //!                         for programs that rely on tail calls or inlining to fit the stack
 //!
@@ -37,7 +40,16 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Default)]
+struct Extra {
+    name: String,
+    text: String,
+    /// compiled by gcc rather than cinder
+    gcc: bool,
+}
+
+#[derive(Debug, Clone, Default)]
 struct Case {
+    extras: Vec<Extra>,
     name: String,
     source: String,
     exit: i32,
@@ -64,6 +76,7 @@ fn parse_bundle(path: &Path) -> Vec<Case> {
         Source,
         Stdin,
         Stdout,
+        Extra,
     }
     let mut sec = Sec::Source;
     for line in text.split_inclusive('\n') {
@@ -95,6 +108,13 @@ fn parse_bundle(path: &Path) -> Vec<Case> {
                 c.expect_error = Some(e.to_string());
             } else if rest == "skip-gcc" {
                 c.skip_gcc = true;
+            } else if let Some(n) = rest
+                .strip_prefix("file: ")
+                .map(|n| (n, false))
+                .or_else(|| rest.strip_prefix("gcc-file: ").map(|n| (n, true)))
+            {
+                c.extras.push(Extra { name: n.0.trim().to_string(), text: String::new(), gcc: n.1 });
+                sec = Sec::Extra;
             } else if let Some(n) = rest.strip_prefix("min-opt: ") {
                 c.min_opt = n.trim().parse().unwrap();
             } else {
@@ -107,6 +127,7 @@ fn parse_bundle(path: &Path) -> Vec<Case> {
                 Sec::Source => c.source.push_str(line),
                 Sec::Stdin => c.stdin.push_str(line),
                 Sec::Stdout => c.stdout.push_str(line),
+                Sec::Extra => c.extras.last_mut().unwrap().text.push_str(line),
             }
         }
     }
@@ -193,13 +214,33 @@ fn compile_cinder(c: &Case, opt: &str, dir: &Path) -> Result<PathBuf, String> {
     let src = dir.join("prog.c");
     fs::write(&src, &c.source).unwrap();
     let exe = dir.join("prog");
+    let mut inputs: Vec<PathBuf> = vec![src];
+    for x in &c.extras {
+        let path = dir.join(&x.name);
+        fs::write(&path, &x.text).unwrap();
+        if x.gcc {
+            let obj = dir.join(format!("{}.gcc.o", x.name));
+            let g = Command::new("gcc")
+                .args(["-O2", "-w", "-fno-builtin", "-c", "-o"])
+                .arg(&obj)
+                .arg(&path)
+                .output()
+                .expect("run gcc");
+            if !g.status.success() {
+                return Err(format!("gcc rejected {}:\n{}", x.name, String::from_utf8_lossy(&g.stderr)));
+            }
+            inputs.push(obj);
+        } else {
+            inputs.push(path);
+        }
+    }
     let out = Command::new(env!("CARGO_BIN_EXE_cinder"))
         .arg(format!("-O{}", opt))
         .args(&c.flags)
         .arg("--color=never")
         .arg("-o")
         .arg(&exe)
-        .arg(&src)
+        .args(&inputs)
         .output()
         .expect("run cinder");
     if out.status.success() {
@@ -213,11 +254,18 @@ fn compile_gcc(c: &Case, dir: &Path) -> Result<PathBuf, String> {
     let src = dir.join("ref.c");
     fs::write(&src, &c.source).unwrap();
     let exe = dir.join("ref");
+    let mut extra_paths: Vec<PathBuf> = Vec::new();
+    for x in &c.extras {
+        let path = dir.join(format!("ref-{}", x.name));
+        fs::write(&path, &x.text).unwrap();
+        extra_paths.push(path);
+    }
     let out = Command::new("gcc")
         .arg(format!("-O{}", c.min_opt))
         .args(["-w", "-fno-builtin", "-o"])
         .arg(&exe)
         .arg(&src)
+        .args(&extra_paths)
         .arg("-lm")
         .output()
         .expect("run gcc");
@@ -288,6 +336,13 @@ fn bless(path: &Path) {
         text.push_str(&c2.source);
         if !c2.source.ends_with('\n') {
             text.push('\n');
+        }
+        for x in &c2.extras {
+            text.push_str(&format!("//// {}: {}\n", if x.gcc { "gcc-file" } else { "file" }, x.name));
+            text.push_str(&x.text);
+            if !x.text.ends_with('\n') {
+                text.push('\n');
+            }
         }
         if c2.exit != 0 {
             text.push_str(&format!("//// exit: {}\n", c2.exit));

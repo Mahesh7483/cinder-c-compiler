@@ -1,0 +1,258 @@
+//// case: stmt_switch_fallthrough_and_default_placement
+#include <stdio.h>
+static const char *f(int v) {
+    switch (v) {
+    case 1: return "one";
+    default: return "other";
+    case 2:
+    case 3: return "two-three";
+    case -1: return "minus-one";
+    }
+}
+static int g(int v) {
+    int r = 0;
+    switch (v) {
+    case 0: r += 1;
+    case 1: r += 10;
+    case 2: r += 100; break;
+    case 3: r += 1000;
+    default: r += 5;
+    }
+    return r;
+}
+int main(void) {
+    for (int i = -2; i < 5; i++) printf("%s ", f(i));
+    printf("\n");
+    for (int i = -1; i < 6; i++) printf("%d ", g(i));
+    printf("\n");
+    return 0;
+}
+//// stdout
+other minus-one other one two-three two-three other 
+5 111 110 100 1005 5 5 
+//// case: stmt_switch_types_and_nesting
+#include <stdio.h>
+enum E { A, B, C = 10, D };
+static int by_char(char c) {
+    switch (c) { case 'a': return 1; case 'z': return 26; case '\n': return -1; default: return 0; }
+}
+static int by_enum(enum E e) {
+    switch (e) { case A: return 100; case B: return 200; case C: return 300; case D: return 400; }
+    return -1;
+}
+static int nested(int a, int b) {
+    switch (a) {
+    case 1:
+        switch (b) { case 1: return 11; case 2: return 12; }
+        return 10;
+    case 2: { int t = b * 2; return t; }
+    }
+    return 0;
+}
+static int big(unsigned v) {
+    switch (v) { case 0u: return 0; case 4000000000u: return 1; case 100u: return 2; case 2147483648u: return 3; }
+    return 9;
+}
+static int ll(long long v) {
+    switch (v) { case 1LL << 40: return 1; case -5: return 2; case 0: return 3; }
+    return 0;
+}
+int main(void) {
+    printf("%d %d %d %d\n", by_char('a'), by_char('z'), by_char('\n'), by_char('q'));
+    printf("%d %d %d %d %d\n", by_enum(A), by_enum(B), by_enum(C), by_enum(D), by_enum(7));
+    printf("%d %d %d %d %d %d\n", nested(1, 1), nested(1, 2), nested(1, 3), nested(2, 21), nested(2, 0), nested(5, 5));
+    printf("%d %d %d %d %d\n", big(0), big(4000000000u), big(100), big(2147483648u), big(5));
+    printf("%d %d %d %d\n", ll(1LL << 40), ll(-5), ll(0), ll(7));
+    return 0;
+}
+//// stdout
+1 26 -1 0
+100 200 300 400 -1
+11 12 10 42 0 0
+0 1 2 3 9
+1 2 3 0
+//// case: stmt_dense_and_sparse_switches
+#include <stdio.h>
+static int dense(int v) {
+    switch (v) {
+    case 0: return 3; case 1: return 1; case 2: return 4; case 3: return 1; case 4: return 5;
+    case 5: return 9; case 6: return 2; case 7: return 6; case 8: return 5; case 9: return 3;
+    case 10: return 5; case 11: return 8; case 12: return 9; case 13: return 7; case 14: return 9;
+    }
+    return -1;
+}
+static int sparse(int v) {
+    switch (v) { case 1: return 1; case 100: return 2; case 10000: return 3; case 1000000: return 4; case -7: return 5; }
+    return 0;
+}
+int main(void) {
+    int s = 0;
+    for (int i = -3; i < 20; i++) s = s * 7 + dense(i);
+    printf("%d\n", s);
+    int t = 0;
+    int keys[] = {1, 100, 10000, 1000000, -7, 2, 99, 0};
+    for (int i = 0; i < 8; i++) t = t * 5 + sparse(keys[i]);
+    printf("%d\n", t);
+    return 0;
+}
+//// stdout
+-1667050241
+121875
+//// case: stmt_duffs_device
+#include <stdio.h>
+static void copy(char *to, const char *from, int count) {
+    int n = (count + 7) / 8;
+    switch (count % 8) {
+    case 0: do { *to++ = *from++;
+    case 7: *to++ = *from++;
+    case 6: *to++ = *from++;
+    case 5: *to++ = *from++;
+    case 4: *to++ = *from++;
+    case 3: *to++ = *from++;
+    case 2: *to++ = *from++;
+    case 1: *to++ = *from++;
+            } while (--n > 0);
+    }
+}
+int main(void) {
+    char src[40], dst[40] = {0};
+    for (int i = 0; i < 39; i++) src[i] = (char)('A' + i % 26);
+    src[39] = 0;
+    for (int len = 1; len < 39; len += 7) {
+        for (int i = 0; i < 40; i++) dst[i] = 0;
+        copy(dst, src, len);
+        printf("%d:%s\n", len, dst);
+    }
+    return 0;
+}
+//// stdout
+1:A
+8:ABCDEFGH
+15:ABCDEFGHIJKLMNO
+22:ABCDEFGHIJKLMNOPQRSTUV
+29:ABCDEFGHIJKLMNOPQRSTUVWXYZABC
+36:ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJ
+//// case: stmt_goto_forward_backward_and_out_of_loops
+#include <stdio.h>
+int main(void) {
+    int i = 0, sum = 0;
+loop:
+    if (i >= 10) goto done;
+    sum += i;
+    i++;
+    goto loop;
+done:
+    printf("%d\n", sum);
+    for (int a = 0; a < 5; a++)
+        for (int b = 0; b < 5; b++) {
+            if (a * b == 6) { printf("found %d %d\n", a, b); goto out; }
+        }
+    printf("not found\n");
+out:
+    {
+        int n = 3;
+        goto skip;
+        n = 100;
+skip:
+        printf("%d\n", n);
+    }
+    goto end;
+    printf("unreachable\n");
+end:
+    return 0;
+}
+//// stdout
+45
+found 2 3
+3
+//// case: stmt_loops_break_continue_nesting
+#include <stdio.h>
+int main(void) {
+    int total = 0;
+    for (int i = 0; i < 10; i++) {
+        if (i % 2) continue;
+        for (int j = 0; j < 10; j++) {
+            if (j > i) break;
+            if (j == 3) continue;
+            total += i * 10 + j;
+        }
+    }
+    printf("%d\n", total);
+    int n = 0;
+    while (1) { if (++n > 7) break; if (n % 3 == 0) continue; total += n; }
+    do { total += 1000; } while (0);
+    int k = 5;
+    do { k--; if (k == 2) continue; total += k; } while (k > 0);
+    printf("%d %d %d\n", total, n, k);
+    for (;;) { total++; if (total % 7 == 0) break; }
+    printf("%d\n", total);
+    for (int i = 0, j = 10; i < j; i++, j--) total += j - i;
+    printf("%d\n", total);
+    return 0;
+}
+//// stdout
+1281
+2308 8 0
+2310
+2340
+//// case: stmt_dangling_else_empty_and_block_scopes
+#include <stdio.h>
+int main(void) {
+    int a = 1, b = 0;
+    if (a) if (b) printf("ab\n"); else printf("a!b\n");
+    if (!a) ; else printf("else-branch\n");
+    for (int i = 0; i < 3; i++);
+    int x = 1;
+    { int x = 2; { int x = 3; printf("%d ", x); } printf("%d ", x); }
+    printf("%d\n", x);
+    for (int x = 10; x < 12; x++) printf("%d ", x);
+    printf("%d\n", x);
+    if (a == 1) { int y = 5; printf("%d\n", y); }
+    ;;;
+    return 0;
+}
+//// stdout
+a!b
+else-branch
+3 2 1
+10 11 1
+5
+//// case: stmt_returns_and_early_exit_in_loops
+#include <stdio.h>
+static int first_negative(const int *a, int n) {
+    for (int i = 0; i < n; i++) if (a[i] < 0) return i;
+    return -1;
+}
+static int find2(int m[3][3], int v) {
+    for (int i = 0; i < 3; i++)
+        for (int j = 0; j < 3; j++)
+            if (m[i][j] == v) return i * 10 + j;
+    return -1;
+}
+static void noreturn_value(int x) { if (x) return; printf("zero\n"); }
+int main(void) {
+    int a[] = {3, 5, -2, 7, -9};
+    int m[3][3] = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+    printf("%d %d %d %d\n", first_negative(a, 5), first_negative(a, 2), find2(m, 6), find2(m, 10));
+    noreturn_value(1);
+    noreturn_value(0);
+    return first_negative(a, 5) + 1;
+}
+//// exit: 3
+//// stdout
+2 -1 12 -1
+zero
+//// case: stmt_main_variants_and_exit_codes
+#include <stdio.h>
+#include <stdlib.h>
+static void bye(void) { printf("atexit ran\n"); }
+int main(int argc, char **argv) {
+    atexit(bye);
+    printf("%d %d\n", argc, argv[0] != 0);
+    if (argc == 1) exit(7);
+    return 0;
+}
+//// exit: 7
+//// stdout
+1 1
+atexit ran

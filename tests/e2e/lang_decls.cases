@@ -1,0 +1,356 @@
+//// case: decl_complex_declarators
+#include <stdio.h>
+static int add(int a, int b) { return a + b; }
+static int mul(int a, int b) { return a * b; }
+static int (*pick(int which))(int, int) { return which ? mul : add; }
+typedef int (*binop)(int, int);
+static int (*table[2])(int, int) = {add, mul};
+static int (*(*fp_to_picker)(int))(int, int) = pick;
+int main(void) {
+    int a[3][4] = {{1, 2, 3, 4}, {5, 6, 7, 8}, {9, 10, 11, 12}};
+    int (*row)[4] = a + 1;
+    int (*const cp)[3][4] = &a;
+    int *ptrs[3] = {a[0], a[1], a[2]};
+    int **pp = ptrs;
+    binop b = pick(1);
+    printf("%d %d %d %d\n", (*row)[2], (*cp)[2][3], pp[1][1], **pp);
+    printf("%d %d %d %d\n", b(6, 7), table[0](6, 7), fp_to_picker(0)(6, 7), (*fp_to_picker(1))(2, 3));
+    printf("%d %d\n", (int)sizeof(a), (int)sizeof(*row));
+    return 0;
+}
+//// stdout
+7 12 6 1
+42 13 13 6
+48 16
+//// case: decl_typedef_chains_and_qualifiers
+#include <stdio.h>
+typedef unsigned char byte;
+typedef byte pixel[3];
+typedef pixel image_row[2];
+typedef struct node { int v; struct node *next; } node_t, *node_p;
+typedef const int cint;
+int main(void) {
+    image_row r = {{1, 2, 3}, {4, 5, 6}};
+    node_t n2 = {2, 0}, n1 = {1, &n2};
+    node_p p = &n1;
+    cint k = 42;
+    const int *pc = &k;
+    int x = 7;
+    int *const cpx = &x;
+    *cpx = 9;
+    volatile int vv = 3;
+    printf("%d %d %d %d %d %d\n", r[1][2], p->next->v, *pc, x, vv, (int)sizeof(image_row));
+    return 0;
+}
+//// stdout
+6 2 42 9 3 6
+//// case: decl_static_locals_persist
+#include <stdio.h>
+static int counter(void) { static int n = 0; return ++n; }
+static int fib_memo(int n) {
+    static int memo[40];
+    if (n < 2) return n;
+    if (memo[n]) return memo[n];
+    return memo[n] = fib_memo(n - 1) + fib_memo(n - 2);
+}
+static const char *name(int i) { static const char *names[] = {"zero", "one", "two"}; return names[i]; }
+int main(void) {
+    counter(); counter();
+    printf("%d %d %d %s\n", counter(), fib_memo(30), fib_memo(39), name(2));
+    return 0;
+}
+//// stdout
+3 832040 63245986 two
+//// case: decl_enums
+#include <stdio.h>
+enum color { RED, GREEN = 5, BLUE, NEG = -3, AFTER };
+enum { A = 1 << 3, B = A * 2 + 1, C = sizeof(int) };
+static int arr[B];
+int main(void) {
+    enum color c = BLUE;
+    int t[C];
+    switch (c) { case RED: printf("red\n"); break; case BLUE: printf("blue\n"); break; default: printf("other\n"); }
+    printf("%d %d %d %d %d %d %d\n", RED, GREEN, BLUE, NEG, AFTER, (int)sizeof(arr) / (int)sizeof(arr[0]), (int)(sizeof(t) / sizeof(t[0])));
+    return 0;
+}
+//// stdout
+blue
+0 5 6 -3 -2 17 4
+//// case: decl_struct_layout_and_offsets
+#include <stdio.h>
+#include <stddef.h>
+struct A { char c; int i; char d; };
+struct B { char c; char d; short s; int i; };
+struct C { double d; char c; };
+struct D { char c; double d; char e; };
+struct E { char a[3]; short b; char c; long l; };
+union U { char c; int i; double d; char buf[10]; };
+struct F { int x; union { int a; float b; }; struct { char p, q; }; };
+int main(void) {
+    printf("%d %d %d %d %d\n", (int)sizeof(struct A), (int)sizeof(struct B), (int)sizeof(struct C), (int)sizeof(struct D), (int)sizeof(struct E));
+    printf("%d %d %d %d\n", (int)offsetof(struct A, i), (int)offsetof(struct A, d), (int)offsetof(struct D, d), (int)offsetof(struct E, l));
+    printf("%d %d %d\n", (int)sizeof(union U), (int)_Alignof(union U), (int)sizeof(struct F));
+    struct F f = {1, {2}, {'a', 'b'}};
+    f.b = 1.0f;
+    printf("%d %c%c %d\n", f.x, f.p, f.q, f.a == 0x3f800000);
+    return 0;
+}
+//// stdout
+12 8 16 24 16
+4 8 8 8
+16 8 12
+1 ab 1
+//// case: decl_bitfields
+#include <stdio.h>
+struct flags { unsigned a : 3; unsigned b : 5; int c : 4; unsigned d : 1; unsigned : 0; unsigned e : 7; };
+struct packed { unsigned x : 12; unsigned y : 12; unsigned z : 8; };
+struct signs { signed char s : 3; int t : 31; };
+int main(void) {
+    struct flags f = {0};
+    f.a = 9;       /* wraps to 1 */
+    f.b = 31;
+    f.c = -3;
+    f.d = 3;       /* wraps to 1 */
+    f.e = 100;
+    printf("%u %u %d %u %u\n", f.a, f.b, f.c, f.d, f.e);
+    f.c += 10;     /* -3 + 10 = 7 -> wraps to 7? (4-bit signed: 7) */
+    f.a++;
+    f.b -= 40;
+    printf("%d %u %u\n", f.c, f.a, f.b);
+    struct packed p = {0xabc, 0x123, 0xff};
+    p.y ^= 0xfff;
+    printf("%x %x %x %d\n", p.x, p.y, p.z, (int)sizeof(p));
+    struct signs s = {-4, -100000};
+    s.s++;
+    printf("%d %d %d\n", s.s, s.t, (int)sizeof(struct flags));
+    struct flags *pf = &f;
+    pf->e = 5;
+    printf("%u\n", pf->e);
+    return 0;
+}
+//// stdout
+1 31 -3 1 100
+7 2 23
+abc edc ff 4
+-3 -100000 8
+5
+//// case: decl_designated_initializers
+#include <stdio.h>
+struct P { int x, y; };
+struct S { int id; struct P pos; char name[8]; int tags[4]; };
+int main(void) {
+    int a[8] = {[2] = 20, [5] = 50, 60};
+    int b[] = {[3] = 1, 2, [0] = 9};
+    struct P p = {.y = 5, .x = 3};
+    struct S s = {.name = "bob", .pos = {.y = 8}, .tags = {[2] = 7}, .id = 99};
+    struct S t = {1, {2, 3}, "al", {4, 5, 6, 7}};
+    struct P arr[3] = {[1] = {10, 11}, [2].y = 12};
+    char str[] = {'a', 'b', [4] = 'e', 0};
+    for (int i = 0; i < 8; i++) printf("%d ", a[i]);
+    printf("| %d %d %d %d %d %d\n", (int)(sizeof b / sizeof b[0]), b[0], b[3], b[4], p.x, p.y);
+    printf("%d %d %d %s %d %d %d %d\n", s.id, s.pos.x, s.pos.y, s.name, s.tags[0], s.tags[1], s.tags[2], s.tags[3]);
+    printf("%d %d %s %d %d %d %d %d\n", t.id, t.pos.y, t.name, t.tags[3], arr[0].x, arr[1].y, arr[2].x, arr[2].y);
+    printf("%c%c%d%c %d\n", str[0], str[1], str[2], str[4], (int)sizeof str);
+    return 0;
+}
+//// stdout
+0 0 20 0 0 50 60 0 | 5 9 1 2 3 5
+99 0 8 bob 0 0 7 0
+1 3 al 7 0 11 0 12
+ab0e 6
+//// case: decl_partial_and_nested_initializers
+#include <stdio.h>
+struct In { int a[2]; char c; };
+struct Out { struct In in[2]; double d; };
+static struct Out g = {{{{1, 2}, 'x'}, {{3}}}, 2.5};
+int main(void) {
+    struct Out l = {{{{7, 8}, 'q'}}, 1.5};
+    int m[2][3] = {{1}, {2, 3}};
+    int z[5] = {0};
+    char s1[10] = "hi";
+    char s2[] = "hello";
+    char s3[5] = "12345";
+    printf("%d %d %c %d %d %.1f\n", g.in[0].a[1], g.in[1].a[0], g.in[0].c, g.in[1].a[1], (int)g.in[1].c, g.d);
+    printf("%d %d %c %d %d %.1f\n", l.in[0].a[0], l.in[0].a[1], l.in[0].c, l.in[1].a[0], (int)l.in[1].c, l.d);
+    printf("%d %d %d %d %d %d | %d %d\n", m[0][0], m[0][1], m[0][2], m[1][0], m[1][1], m[1][2], z[4], (int)sizeof(z));
+    printf("%s %d %s %d %c%c%c%c%c\n", s1, (int)sizeof(s1), s2, (int)sizeof(s2), s3[0], s3[1], s3[2], s3[3], s3[4]);
+    return 0;
+}
+//// stdout
+2 3 x 0 0 2.5
+7 8 q 0 0 1.5
+1 0 0 2 3 0 | 0 20
+hi 10 hello 6 12345
+//// case: decl_compound_literals
+#include <stdio.h>
+struct P { int x, y; };
+static int sum(const int *a, int n) { int s = 0; for (int i = 0; i < n; i++) s += a[i]; return s; }
+static struct P mid(struct P a, struct P b) { return (struct P){(a.x + b.x) / 2, (a.y + b.y) / 2}; }
+int main(void) {
+    int total = 0;
+    for (int i = 0; i < 3; i++) total += sum((int[]){i, i * 2, i * 3}, 3);
+    struct P *p = &(struct P){4, 5};
+    p->x += 10;
+    struct P m = mid((struct P){0, 0}, (struct P){10, 20});
+    const char *s = (const char[]){'o', 'k', 0};
+    int v = (int){42} + 1;
+    printf("%d %d %d %d %d %s %d\n", total, p->x, p->y, m.x, m.y, s, v);
+    return 0;
+}
+//// stdout
+18 14 5 5 10 ok 43
+//// case: decl_string_and_char_literals
+#include <stdio.h>
+#include <string.h>
+int main(void) {
+    const char *a = "tab\there";
+    const char *b = "quote\"back\\slash";
+    const char *c = "hex\x41\x42" "C" "oct\101\102";
+    const char *d = "con" "cat" "enated";
+    printf("%s|%s|%s|%s\n", a, b, c, d);
+    printf("%d %d %d %d %d %d\n", 'a', '\n', '\0', '\\', '\'', '\x7f');
+    printf("%d %d %d\n", (int)sizeof("abc"), (int)strlen("abc\0def"), (int)sizeof("abc\0def"));
+    printf("%d %d\n", (int)sizeof('a'), '\377' < 0);
+    printf("%d %d %d\n", 0x7fffffff, 017, 0b101);
+    return 0;
+}
+//// stdout
+tab	here|quote"back\slash|hexABCoctAB|concatenated
+97 10 0 92 39 127
+4 3 8
+4 1
+2147483647 15 5
+//// case: decl_integer_literal_types
+#include <stdio.h>
+int main(void) {
+    printf("%d %d %d %d %d\n", (int)sizeof(1), (int)sizeof(1L), (int)sizeof(1LL), (int)sizeof(1U), (int)sizeof(1UL));
+    printf("%d %d %d\n", (int)sizeof(2147483648), (int)sizeof(2147483647), (int)sizeof(0x80000000));
+    printf("%d %d %d\n", -2147483647 - 1 < 0, 4294967295U > 0, (int)sizeof(4294967296));
+    printf("%d %d %d %d\n", (int)sizeof(1.0), (int)sizeof(1.0f), (int)sizeof('a' + 1), (int)sizeof((char)1));
+    printf("%lu %lu\n", (unsigned long)sizeof(void *), (unsigned long)sizeof(long));
+    printf("%.3f %.3f %.1f %.1f\n", 1e3, 1.5e-3, 0x1p4, 1.f);
+    return 0;
+}
+//// stdout
+4 8 8 4 8
+8 4 4
+1 1 8
+8 4 4 1
+8 8
+1000.000 0.002 16.0 1.0
+//// case: decl_generic_selection
+#include <stdio.h>
+#define KIND(x) _Generic((x), int: "int", unsigned: "unsigned", long: "long", double: "double", float: "float", char: "char", char *: "char*", default: "other")
+int main(void) {
+    int i = 0; unsigned u = 0; long l = 0; double d = 0; float f = 0; char c = 0; const char *s = "";
+    printf("%s %s %s %s %s %s %s %s\n", KIND(i), KIND(u), KIND(l), KIND(d), KIND(f), KIND(c), KIND((char *)0), KIND(s));
+    printf("%s %s %s\n", KIND(1), KIND(1.0), KIND('a'));
+    return 0;
+}
+//// stdout
+int unsigned long double float char char* other
+int double int
+//// case: decl_static_assert_alignof_alignas
+#include <stdio.h>
+#include <stdalign.h>
+#include <stddef.h>
+_Static_assert(sizeof(int) == 4, "int is 4 bytes");
+_Static_assert(sizeof(void *) == 8, "64-bit");
+struct S { char c; alignas(16) int x; };
+int main(void) {
+    alignas(32) char buf[8];
+    printf("%d %d %d %d\n", (int)alignof(double), (int)alignof(struct S), (int)sizeof(struct S), ((unsigned long)buf % 32) == 0);
+    printf("%d %d %d\n", (int)_Alignof(char), (int)_Alignof(long long), (int)alignof(max_align_t) >= 8);
+    return 0;
+}
+//// stdout
+8 16 32 1
+1 8 1
+//// case: decl_func_name_and_misc_builtins
+#include <stdio.h>
+#include <stdbool.h>
+static const char *who(void) { return __func__; }
+int main(void) {
+    bool t = 5, f = 0;
+    _Bool g = 0.5;
+    printf("%s %s %d %d %d %d\n", who(), __func__, t, f, g, (int)sizeof(bool));
+    printf("%d %d\n", __LINE__, (int)sizeof(__FILE__) > 1);
+    printf("%d %d\n", __STDC_VERSION__ >= 201112L, __STDC__);
+    return 0;
+}
+//// stdout
+who main 1 0 1 1
+8 1
+1 1
+//// case: decl_global_initializers_and_tentative_definitions
+#include <stdio.h>
+int tentative;
+int tentative;
+int init = 5;
+static int s_init = 6;
+const int ci = 7;
+int arr[4] = {1, 2};
+char msg[] = "global";
+const char *pmsg = "pointer";
+int *pi = &init;
+int *pa = &arr[2];
+struct P { int x, y; } gp = {3, 4}, *pgp = &gp;
+int (*fp)(void);
+static int five(void) { return 5; }
+int (*fp2)(void) = five;
+long big = 1L << 40;
+double dd = 1.0 / 4;
+int expr = 3 * 4 + (int)sizeof(arr);
+int main(void) {
+    printf("%d %d %d %d %d %d %d %d\n", tentative, init, s_init, ci, arr[1], arr[3], *pi, *pa);
+    printf("%s %s %d %d %d %d\n", msg, pmsg, gp.y, pgp->x, fp == 0, fp2());
+    printf("%ld %.2f %d\n", big, dd, expr);
+    return 0;
+}
+//// stdout
+0 5 6 7 2 0 5 0
+global pointer 4 3 1 5
+1099511627776 0.25 28
+//// case: decl_extern_and_multiple_declarations
+#include <stdio.h>
+extern int shared;
+int shared = 11;
+static int helper(int);
+int use(void);
+int main(void) {
+    int a = 1, b = 2, *p = &a, arr[2] = {5, 6};
+    {
+        int a = 100;
+        b += a;
+    }
+    extern int shared;
+    printf("%d %d %d %d %d %d\n", a, b, *p, arr[1], shared, helper(3));
+    return use();
+}
+static int helper(int x) { return x * shared; }
+int use(void) { return 0; }
+//// stdout
+1 102 1 6 11 33
+//// case: decl_over_aligned_locals_at_any_stack_depth
+#include <stdio.h>
+#include <stdalign.h>
+static int bad;
+static int check(int n) {
+    char pad[8 + 16 * (n % 5)];
+    alignas(32) char a[3];
+    alignas(64) int b[4];
+    alignas(16) double c;
+    pad[0] = (char)n; a[0] = 1; b[0] = 2; c = 3.0;
+    if ((unsigned long)a % 32) bad |= 1;
+    if ((unsigned long)b % 64) bad |= 2;
+    if ((unsigned long)&c % 16) bad |= 4;
+    if (n > 0) return check(n - 1) + pad[0] + a[0] + b[0] + (int)c;
+    return pad[0] + a[0] + b[0] + (int)c;
+}
+int main(void) {
+    int r = check(37);
+    printf("%d %d\n", r, bad);
+    return 0;
+}
+//// stdout
+931 0

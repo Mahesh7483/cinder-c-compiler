@@ -1,0 +1,269 @@
+//// case: vla_basic_sum_fill_and_sizeof
+#include <stdio.h>
+static int run(int n) {
+    int a[n];
+    for (int i = 0; i < n; i++) a[i] = i * i;
+    int s = 0;
+    for (int i = 0; i < n; i++) s += a[i];
+    printf("%d %d %d\n", s, (int)(sizeof(a) / sizeof(a[0])), (int)sizeof(a));
+    return s;
+}
+int main(void) {
+    run(1);
+    run(10);
+    run(100);
+    return run(5) & 7;
+}
+//// exit: 6
+//// stdout
+0 1 4
+285 10 40
+328350 100 400
+30 5 20
+//// case: vla_two_dimensional_runtime_strides
+#include <stdio.h>
+static long fill_and_sum(int r, int c) {
+    int m[r][c];
+    for (int i = 0; i < r; i++)
+        for (int j = 0; j < c; j++) m[i][j] = i * 100 + j;
+    long s = 0;
+    for (int i = 0; i < r; i++)
+        for (int j = 0; j < c; j++) s += m[i][j] * (i + 1);
+    printf("%d %d %d\n", (int)sizeof(m), (int)sizeof(m[0]), (int)sizeof(m[0][0]));
+    printf("%d %d\n", m[r - 1][c - 1], *(*(m + 1) + 1));
+    int *flat = &m[0][0];
+    printf("%d %d\n", flat[c], flat[c + 2]);
+    return s;
+}
+int main(void) {
+    printf("%ld\n", fill_and_sum(3, 4));
+    printf("%ld\n", fill_and_sum(5, 2));
+    printf("%ld\n", fill_and_sum(2, 7));
+    return 0;
+}
+//// stdout
+48 16 4
+203 101
+100 102
+3236
+40 8 4
+401 101
+100 200
+8015
+56 28 4
+106 101
+100 102
+1463
+//// case: vla_three_dimensional
+#include <stdio.h>
+int main(void) {
+    int a = 2, b = 3, c = 4;
+    int t[a][b][c];
+    for (int i = 0; i < a; i++)
+        for (int j = 0; j < b; j++)
+            for (int k = 0; k < c; k++) t[i][j][k] = i * 100 + j * 10 + k;
+    printf("%d %d %d %d\n", t[0][0][0], t[1][2][3], t[1][0][2], t[0][2][1]);
+    printf("%d %d %d\n", (int)sizeof(t), (int)sizeof(t[0]), (int)sizeof(t[0][0]));
+    int (*p)[c] = t[1];
+    printf("%d %d\n", p[2][3], (int)(&t[1][2] - &t[0][0]));
+    return 0;
+}
+//// stdout
+0 123 102 21
+96 48 16
+123 5
+//// case: vla_in_loops_does_not_leak_stack
+#include <stdio.h>
+int main(void) {
+    long total = 0;
+    for (int i = 0; i < 1000000; i++) {
+        int n = 1024 + (i % 4);
+        char buf[n];
+        buf[0] = (char)i;
+        buf[n - 1] = (char)(i >> 3);
+        if (i % 7 == 0) continue;
+        total += buf[0] + buf[n - 1];
+        if (i == 999990) break;
+    }
+    printf("%ld\n", total);
+    int j = 0;
+    while (j < 500000) {
+        int n = 2048;
+        double d[n / 8];
+        d[0] = j;
+        d[n / 8 - 1] = d[0] * 2;
+        j++;
+        if (d[n / 8 - 1] < 0) break;
+    }
+    printf("%d\n", j);
+    return 0;
+}
+//// stdout
+-838506
+500000
+//// case: vla_parameters
+#include <stdio.h>
+static int sum1(int n, int a[n]) { int s = 0; for (int i = 0; i < n; i++) s += a[i]; return s; }
+static int sum2(int r, int c, int m[r][c]) {
+    int s = 0;
+    for (int i = 0; i < r; i++)
+        for (int j = 0; j < c; j++) s += m[i][j] * (j + 1);
+    return s;
+}
+static void scale(int c, int (*row)[c], int rows, int k) {
+    for (int i = 0; i < rows; i++)
+        for (int j = 0; j < c; j++) row[i][j] *= k;
+}
+static int corner(int n, int m[n][n]) { return m[0][0] + m[n - 1][n - 1] + (int)sizeof(m[0]); }
+int main(void) {
+    int a[6] = {1, 2, 3, 4, 5, 6};
+    int m[3][4] = {{1, 2, 3, 4}, {5, 6, 7, 8}, {9, 10, 11, 12}};
+    int sq[3][3] = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+    printf("%d %d\n", sum1(6, a), sum1(3, a + 2));
+    printf("%d\n", sum2(3, 4, m));
+    scale(4, m, 3, 2);
+    printf("%d %d %d\n", m[0][0], m[1][3], m[2][2]);
+    printf("%d\n", corner(3, sq));
+    return 0;
+}
+//// stdout
+21 12
+210
+2 16 22
+22
+//// case: vla_typedef_and_pointer_to_vla
+#include <stdio.h>
+static int f(int n) {
+    typedef int row_t[n];
+    row_t x, y;
+    for (int i = 0; i < n; i++) { x[i] = i; y[i] = 10 * i; }
+    row_t *p = &x;
+    int (*q)[n] = &y;
+    printf("%d %d %d %d\n", (*p)[n - 1], (*q)[n - 1], (int)sizeof(row_t), (int)sizeof(*p));
+    int a[3][n];
+    int (*r)[n] = a;
+    for (int i = 0; i < 3; i++) for (int j = 0; j < n; j++) a[i][j] = i + j;
+    r++;
+    printf("%d %d %d\n", (*r)[0], r[1][n - 1], (int)(r - a));
+    r += 1;
+    printf("%d\n", r[0][n - 1]);
+    return n;
+}
+int main(void) { return f(5) + f(1) - 6; }
+//// stdout
+4 40 20 20
+1 6 1
+6
+0 0 4 4
+1 2 1
+2
+//// case: vla_casts_and_sizeof_type_names
+#include <stdio.h>
+static int g(int n) {
+    int buf[n * n];
+    for (int i = 0; i < n * n; i++) buf[i] = i;
+    int (*m)[n] = (int (*)[n])buf;
+    printf("%d %d %d\n", m[1][1], m[n - 1][n - 1], (int)sizeof(int[n]));
+    printf("%d %d\n", (int)sizeof(int[n][n]), (int)sizeof(char[n + 1]));
+    return (int)sizeof(buf);
+}
+int main(void) { printf("%d\n", g(3)); printf("%d\n", g(6)); return 0; }
+//// stdout
+4 8 12
+36 4
+36
+7 35 24
+144 7
+144
+//// case: vla_with_calls_stack_args_and_varargs
+#include <stdio.h>
+#include <string.h>
+struct P { long a, b, c; };
+static long many(long a, long b, long c, long d, long e, long f, long g, long h, long i, long j) {
+    return a + b * 2 + c * 3 + d * 4 + e * 5 + f * 6 + g * 7 + h * 8 + i * 9 + j * 10;
+}
+static long byval(struct P p, struct P q) { return p.a + p.b * 2 + p.c * 3 + q.a * 4 + q.b * 5 + q.c * 6; }
+static double mixed(double a, int n, double b) { return a * n + b; }
+int main(void) {
+    int n = 20;
+    long v[n];
+    for (int i = 0; i < n; i++) v[i] = i + 1;
+    struct P p = {v[0], v[1], v[2]}, q = {v[3], v[4], v[5]};
+    printf("%ld %ld\n", many(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9]), byval(p, q));
+    printf("%.2f %d %s %c\n", mixed(1.5, (int)v[3], 2.25), (int)v[19], "str", (char)('a' + v[2]));
+    {
+        int m = 7;
+        char text[m + 1];
+        memset(text, 'x', m);
+        text[m] = 0;
+        printf("%s %d\n", text, (int)strlen(text));
+        long w[m];
+        for (int i = 0; i < m; i++) w[i] = many(i, i, i, i, i, i, i, i, i, i);
+        printf("%ld %ld\n", w[0], w[m - 1]);
+    }
+    printf("%ld\n", v[n - 1]);
+    return 0;
+}
+//// stdout
+385 91
+8.25 20 str d
+xxxxxxx 7
+0 330
+20
+//// case: vla_recursion_and_alignment
+#include <stdio.h>
+static int bad;
+static long walk(int depth, int n) {
+    double d[n];
+    long l[n / 2 + 1];
+    d[0] = depth; l[0] = depth * 3;
+    if (((unsigned long)d) % 16) bad |= 1;
+    if (((unsigned long)l) % 16) bad |= 2;
+    if (depth == 0) return d[0] + l[0];
+    return walk(depth - 1, n + 1) + (long)d[0] + l[0];
+}
+struct S { char c; double d; };
+int main(void) {
+    long r = walk(50, 3);
+    for (int n = 1; n < 9; n++) {
+        struct S s[n];
+        char tail[n];
+        s[0].d = n; tail[0] = 1;
+        if (((unsigned long)s) % 16) bad |= 4;
+    }
+    printf("%ld %d\n", r, bad);
+    return 0;
+}
+//// stdout
+5100 0
+//// case: vla_in_switch_and_nested_blocks
+#include <stdio.h>
+static int pick(int k, int n) {
+    int total = 0;
+    switch (k) {
+    case 0: {
+        int a[n];
+        for (int i = 0; i < n; i++) a[i] = i;
+        for (int i = 0; i < n; i++) total += a[i];
+        break;
+    }
+    case 1: {
+        int b[n * 2];
+        for (int i = 0; i < n * 2; i++) b[i] = i * 2;
+        total = b[n * 2 - 1];
+        { int c[n]; c[0] = 5; total += c[0]; }
+        break;
+    }
+    default:
+        total = -1;
+    }
+    return total;
+}
+int main(void) {
+    for (int k = 0; k < 3; k++) printf("%d %d\n", pick(k, 5), pick(k, 9));
+    return 0;
+}
+//// stdout
+10 36
+23 39
+-1 -1
