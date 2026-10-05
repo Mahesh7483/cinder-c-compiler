@@ -258,6 +258,9 @@ async function api(path, body, signal) {
 
 const SEVERITY = { error: 8, fatal: 8, warning: 4, note: 2 };
 
+/** Is this diagnostic located in the editor's source (as opposed to a bundled header such as <omp.h>)? */
+const inSource = (d) => !d.file || d.file === 'main.c';
+
 function renderDiagnostics(list, extraText = '') {
   const box = $('#console-diag');
   box.textContent = '';
@@ -276,7 +279,7 @@ function renderDiagnostics(list, extraText = '') {
     b.type = 'button';
     const head = document.createElement('span');
     head.className = 'diag-head';
-    head.textContent = `main.c:${d.line}:${d.col}`;
+    head.textContent = `${d.file || 'main.c'}:${d.line}:${d.col}${inSource(d) ? '' : ' (bundled header, not your code)'}`;
     const msg = document.createElement('span');
     msg.className = 'diag-msg';
     const sev = document.createElement('span');
@@ -290,7 +293,11 @@ function renderDiagnostics(list, extraText = '') {
       note.textContent = `note: ${n.message}${n.line ? ` (line ${n.line})` : ''}`;
       b.appendChild(note);
     }
-    b.addEventListener('click', () => { source.goTo(d.line, d.col); if (document.body.dataset.view !== 'source') setView('source'); });
+    b.addEventListener('click', () => {
+      if (!inSource(d)) return; // a header's line number means nothing in the editor
+      source.goTo(d.line, d.col);
+      if (document.body.dataset.view !== 'source') setView('source');
+    });
     box.appendChild(b);
   }
   if (extraText) {
@@ -305,7 +312,7 @@ function renderDiagnostics(list, extraText = '') {
   badge.textContent = String(total);
   badge.classList.toggle('warn', errors === 0);
   if (usingMonaco) {
-    source.setMarkers(items.filter((d) => d.level !== 'note').map((d) => ({
+    source.setMarkers(items.filter((d) => d.level !== 'note' && inSource(d)).map((d) => ({
       severity: SEVERITY[d.level] || 4,
       message: d.message,
       code: d.flag || undefined,
