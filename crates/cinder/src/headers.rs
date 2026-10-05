@@ -22,7 +22,7 @@ macro_rules! bundle {
 
 bundle! {
     "assert.h", "ctype.h", "errno.h", "float.h", "inttypes.h", "iso646.h", "limits.h",
-    "math.h", "stdalign.h", "stdarg.h", "stdbool.h", "stddef.h", "stdint.h", "stdio.h",
+    "math.h", "omp.h", "stdalign.h", "stdarg.h", "stdbool.h", "stddef.h", "stdint.h", "stdio.h",
     "stdlib.h", "stdnoreturn.h", "string.h", "time.h", "unistd.h", "sys/types.h",
 }
 
@@ -31,10 +31,6 @@ bundle! {
 pub fn missing_header_hint(name: &str, angle: bool) -> Option<String> {
     let base = name.rsplit('/').next().unwrap_or(name);
     match base {
-        "omp.h" => Some(
-            "OpenMP is not supported: Cinder has no omp.h and does not implement '#pragma omp' (build the program without OpenMP)"
-                .into(),
-        ),
         "mpi.h" | "mpio.h" => Some("MPI is not supported: Cinder has no MPI headers or runtime".into()),
         "pthread.h" | "semaphore.h" | "threads.h" | "stdatomic.h" => {
             Some("threads and atomics are not supported yet (no pthread.h, threads.h or stdatomic.h)".into())
@@ -78,7 +74,6 @@ mod tests {
 
     #[test]
     fn missing_header_hints() {
-        assert!(missing_header_hint("omp.h", true).unwrap().contains("OpenMP is not supported"));
         assert!(missing_header_hint("mpi.h", false).unwrap().contains("MPI is not supported"));
         assert!(missing_header_hint("sys/mpi.h", true).unwrap().contains("MPI is not supported"));
         assert!(missing_header_hint("pthread.h", true).unwrap().contains("threads"));

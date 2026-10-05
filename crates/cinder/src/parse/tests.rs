@@ -422,6 +422,12 @@ fn unknown_pragma_warns() {
     assert!(ok("#pragma GCC diagnostic push\nint y;").warnings.is_empty());
 }
 
+#[test]
+fn omp_pragma_is_ignored_with_one_warning() {
+    let r = ok("void f(void) {\n#pragma omp parallel for\nfor (int i = 0; i < 3; i++) {}\n#pragma omp barrier\n}");
+    assert_eq!(r.warnings, ["'#pragma omp' is ignored: OpenMP is not implemented, parallel regions run on one thread"]);
+}
+
 // ───────────────────────────── statements ─────────────────────────────
 
 #[test]
@@ -694,7 +700,13 @@ fn every_bundled_header_parses() {
     for name in crate::headers::BUNDLED_NAMES {
         let r = p(&format!("#include <{}>\n", name));
         assert!(r.errors.is_empty(), "{name}: {:?}", r.errors);
-        assert!(r.warnings.is_empty(), "{name}: {:?}", r.warnings);
+        // <omp.h> deliberately warns that OpenMP is a single-thread stand-in; nothing else may warn
+        let expected: &[&str] = if *name == "omp.h" { &["OpenMP is not implemented"] } else { &[] };
+        assert!(
+            r.warnings.len() == expected.len() && r.warnings.iter().zip(expected).all(|(w, e)| w.contains(e)),
+            "{name}: {:?}",
+            r.warnings
+        );
     }
 }
 

@@ -133,6 +133,8 @@ pub struct Parser<'a> {
     last_error_pos: Option<usize>,
     /// `>0` while parsing inside a function body.
     pub(crate) in_function: u32,
+    /// `#pragma omp` has been reported once already.
+    warned_omp: bool,
 }
 
 /// Parse a preprocessed token stream.
@@ -155,6 +157,7 @@ impl<'a> Parser<'a> {
             cur_pack: None,
             last_error_pos: None,
             in_function: 0,
+            warned_omp: false,
         };
         p.apply_pragmas_at(0);
         p
@@ -262,7 +265,18 @@ impl<'a> Parser<'a> {
                     _ => {}
                 }
             }
-            "STDC" | "GCC" | "clang" | "message" | "warning" | "once" | "omp" | "weak" | "comment" => {}
+            "omp" => {
+                // not implemented: say so once instead of silently running parallel code serially
+                if !self.warned_omp {
+                    self.warned_omp = true;
+                    self.sess.diags.warn(
+                        Warn::UnknownPragmas,
+                        span,
+                        "'#pragma omp' is ignored: OpenMP is not implemented, parallel regions run on one thread",
+                    );
+                }
+            }
+            "STDC" | "GCC" | "clang" | "message" | "warning" | "once" | "weak" | "comment" => {}
             _ => {
                 self.sess.diags.warn(Warn::UnknownPragmas, span, format!("unknown pragma ignored: '{}'", first));
             }

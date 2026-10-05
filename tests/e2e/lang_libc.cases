@@ -565,3 +565,71 @@ int main(void) {
 //// stdout
 4 7 4
 0
+//// case: libc_openmp_single_thread_stand_in
+//// skip-gcc
+#include <stdio.h>
+#include <omp.h>
+
+#define N 1000
+
+int main(void) {
+    static double a[N], b[N];
+    double sum = 0.0;
+    long count = 0;
+    double t0 = omp_get_wtime();
+
+    #pragma omp parallel for
+    for (int i = 0; i < N; i++) {
+        a[i] = i * 0.5;
+        b[i] = 2.0 * i;
+    }
+
+    #pragma omp parallel for reduction(+:sum) schedule(static)
+    for (int i = 0; i < N; i++)
+        sum += a[i] * b[i];
+
+    #pragma omp parallel num_threads(4)
+    {
+        int id = omp_get_thread_num();
+        #pragma omp critical
+        {
+            count += 1 + id;
+        }
+        #pragma omp barrier
+        #pragma omp single
+        printf("team size %d\n", omp_get_num_threads());
+    }
+
+    #pragma omp parallel sections
+    {
+        #pragma omp section
+        printf("section A\n");
+        #pragma omp section
+        printf("section B\n");
+    }
+
+    long hits = 0;
+    #pragma omp parallel for collapse(2) reduction(+:hits)
+    for (int i = 0; i < 10; i++)
+        for (int j = 0; j < 10; j++)
+            hits += (i + j) % 3 == 0;
+
+    #pragma omp atomic
+    count++;
+
+    omp_lock_t lock;
+    omp_init_lock(&lock);
+    omp_set_lock(&lock);
+    omp_unset_lock(&lock);
+    omp_destroy_lock(&lock);
+
+    double dt = omp_get_wtime() - t0;
+    printf("sum=%.1f count=%ld hits=%ld threads=%d max=%d time_ok=%d\n", sum, count, hits, omp_get_num_threads(),
+           omp_get_max_threads(), dt >= 0.0);
+    return 0;
+}
+//// stdout
+team size 1
+section A
+section B
+sum=332833500.0 count=2 hits=34 threads=1 max=1 time_ok=1

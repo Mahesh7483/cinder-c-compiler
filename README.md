@@ -121,7 +121,7 @@ aligned))`, `#pragma pack`; `__builtin_va_*`, `__builtin_expect/unreachable/trap
 **Preprocessor:** object/function-like macros, `#`, `##`, variadics and `__VA_OPT__`, `#if` expressions, `defined`,
 `__has_include`, `#include` search paths, `#pragma once`, `_Pragma`, `__COUNTER__`, predefined macros.
 **Libc:** compiles against bundled headers (`assert ctype errno float inttypes iso646 limits math stdalign stdarg stdbool
-stddef stdint stdio stdlib stdnoreturn string time unistd sys/types`) and links with the system glibc.
+stddef stdint stdio stdlib stdnoreturn string time unistd sys/types`, plus a single-thread `omp.h`) and links with the system glibc.
 **Optimizations:** mem2reg, sparse conditional constant propagation, strength reduction, copy propagation, CSE with
 redundant-load elimination, DCE + dead stores, CFG simplification, LICM, inlining, tail-call elimination (self recursion
 → loops, sibling calls → `jmp`). See [docs/OPTIMIZER.md](docs/OPTIMIZER.md).
@@ -203,10 +203,14 @@ Other limits:
 
 * **Platform:** x86-64 Linux, System V ABI only. Needs the system `as` and `cc` for assembling and linking. Position-dependent
   code (`-no-pie`); `-fPIC` is accepted and ignored, so no shared libraries.
-* **Parallel programming:** no OpenMP (`<omp.h>` is not found, and `#pragma omp` lines are ignored with
-  `-Wunknown-pragmas`), no MPI (`<mpi.h>`), no threads or atomics (`<pthread.h>`, `<threads.h>`, `<stdatomic.h>`).
-  A missing header is reported with a note saying so. The playground additionally runs programs without network access
-  and with at most 16 processes, so MPI-style programs could not run there anyway.
+* **OpenMP is a single-thread stand-in, not an implementation.** `#include <omp.h>` works (the `omp_*` API returns
+  "1 thread, thread 0", `omp_get_wtime()` is real, locks never block) and `#pragma omp` lines are ignored, so every
+  parallel region runs once on the calling thread. Both produce a warning. Race-free programs, reductions, `critical`,
+  `atomic`, `sections` and `collapse` give the same results as a real run; programs that print the thread count,
+  use `num_threads(n)`, rely on `private(x)` leaving the outer variable unchanged, or measure speed-up behave differently.
+* **No MPI** (`<mpi.h>`), **no threads or atomics** (`<pthread.h>`, `<threads.h>`, `<stdatomic.h>`); a missing header
+  is reported with a note saying so. The playground additionally runs programs without network access and with at
+  most 16 processes, so MPI-style programs could not run there anyway.
 * **Libc surface:** only the headers listed above are bundled (no `signal.h`, `setjmp.h`, `wchar.h`, `locale.h`,
   `complex.h`, `stdatomic.h`, `threads.h`, `fenv.h`, …). `-isystem /usr/include` can be tried, but glibc's headers use many
   GNU extensions and are not guaranteed to parse.

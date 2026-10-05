@@ -403,7 +403,13 @@ fn every_bundled_header_preprocesses_cleanly() {
     for name in crate::headers::BUNDLED_NAMES {
         let o = run(&format!("#include <{}>\n", name));
         assert!(o.errors.is_empty(), "{name}: {:?}", o.errors);
-        assert!(o.warnings.is_empty(), "{name}: {:?}", o.warnings);
+        // <omp.h> deliberately warns that OpenMP is a single-thread stand-in; nothing else may warn
+        let expected: &[&str] = if *name == "omp.h" { &["OpenMP is not implemented"] } else { &[] };
+        assert!(
+            o.warnings.len() == expected.len() && o.warnings.iter().zip(expected).all(|(w, e)| w.contains(e)),
+            "{name}: {:?}",
+            o.warnings
+        );
     }
 }
 
@@ -462,7 +468,6 @@ fn missing_include_is_fatal() {
 #[test]
 fn missing_include_explains_unsupported_runtimes() {
     for (src, needle) in [
-        ("#include <omp.h>\n", "OpenMP is not supported"),
         ("#include \"mpi.h\"\n", "MPI is not supported"),
         ("#include <pthread.h>\n", "threads and atomics"),
         ("#include <wchar.h>\n", "bundles only these standard headers"),

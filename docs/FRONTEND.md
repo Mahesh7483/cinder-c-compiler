@@ -58,7 +58,7 @@ expansion, which are rescanned before the file continues.
   system directories are refused, so untrusted source cannot read host files at compile time.
 * **Bundled libc headers** (`include/`, embedded with `include_str!` by `headers.rs`) declare
   glibc's ABI with plain C11: `assert ctype errno float inttypes iso646 limits math stdalign
-  stdarg stdbool stddef stdint stdio stdlib stdnoreturn string time unistd sys/types`. glibc's own
+  stdarg stdbool stddef stdint stdio stdlib stdnoreturn string time unistd sys/types`, plus `omp.h`, a single-thread stand-in for the OpenMP API. glibc's own
   headers need dozens of GNU extensions, and bundling keeps behaviour identical on every host and
   the compiler a single file. `-isystem /usr/include` opts into real system headers.
 * `-E` output (`pp/output.rs`) keeps the line structure and prints `# <line> "<file>"` markers.

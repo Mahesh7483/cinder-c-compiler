@@ -956,7 +956,13 @@ fn every_bundled_header_analyzes_cleanly() {
     for name in crate::headers::BUNDLED_NAMES {
         let r = run(&format!("#include <{}>\n", name));
         assert!(r.errors.is_empty(), "{name}: {:?}", r.errors);
-        assert!(r.warnings.is_empty(), "{name}: {:?}", r.warnings);
+        // <omp.h> deliberately warns that OpenMP is a single-thread stand-in; nothing else may warn
+        let expected: &[&str] = if *name == "omp.h" { &["OpenMP is not implemented"] } else { &[] };
+        assert!(
+            r.warnings.len() == expected.len() && r.warnings.iter().zip(expected).all(|(w, e)| w.contains(e)),
+            "{name}: {:?}",
+            r.warnings
+        );
     }
 }
 
