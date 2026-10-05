@@ -425,6 +425,24 @@ function renderRun(r) {
   } else if (r.exitCode !== null && r.exitCode !== undefined) {
     meta(r.exitCode === 0 ? 'good' : 'bad', `Exit code ${r.exitCode}`);
   }
+  if (!$('#stdin').value.trim() && readsStdin(source.value)) {
+    meta('hint', 'This program reads input (scanf, fgets, …) but the Input tab is empty. The program cannot ask for input while it runs: type it into the Input tab first, then press Run.');
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'hint-button';
+    open.textContent = 'Open the Input tab';
+    open.addEventListener('click', () => { selectConsoleTab('stdin'); $('#stdin').focus(); });
+    out.append(open);
+  }
+  if (r.signal && !r.stdout) {
+    meta('hint', 'Text printed before the crash can be missing: output sent to a pipe is buffered and lost when the program dies. Call fflush(stdout) after printf to see how far it got.');
+  }
+}
+
+/** Does the source read standard input? (a heuristic for the "Input tab is empty" hint) */
+function readsStdin(src) {
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  return /\b(scanf|getchar|gets|getline)\s*\(/.test(code) || /\b(fscanf|fgets|fgetc|getc|fread)\s*\([^;]*\bstdin\b/.test(code);
 }
 
 async function runNow() {
